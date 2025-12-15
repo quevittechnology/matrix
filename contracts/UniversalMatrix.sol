@@ -30,7 +30,7 @@ contract UniversalMatrix is
     //////////////////////////////////////////////////////////////*/
     uint256 public constant MAX_LEVEL = 13;
     uint256 public constant ROI_CAP_PERCENT = 150;
-    uint256 public constant MAX_LAYERS = 26;
+    uint256 public constant INCOME_LAYERS = 13; // Income distribution limited to 13 layers
     uint256 public constant DIRECT_REQUIRED = 2;
     uint256 public constant ROYALTY_DIST_TIME = 24 hours;
     uint256 public constant ROYALTY_PERCENT = 5; // 5% of deposits go to royalty
@@ -150,23 +150,9 @@ contract UniversalMatrix is
         defaultRefer = 17534;
         startTime = block.timestamp;
 
-        // Initialize level prices (in wei)
-        // These are placeholder values - should be set based on BNB/USDT rate
-        levelPrice = [
-            8 ether / 1000,      // ~8 USDT worth of BNB
-            12 ether / 1000,     // ~12 USDT
-            24 ether / 1000,     // ~24 USDT
-            48 ether / 1000,     // ~48 USDT
-            96 ether / 1000,     // ~96 USDT
-            192 ether / 1000,    // ~192 USDT
-            384 ether / 1000,    // ~384 USDT
-            768 ether / 1000,    // ~768 USDT
-            1536 ether / 1000,   // ~1536 USDT
-            3072 ether / 1000,   // ~3072 USDT
-            6144 ether / 1000,   // ~6144 USDT
-            12288 ether / 1000,  // ~12288 USDT
-            24576 ether / 1000   // ~24576 USDT
-        ];
+        // Initialize level prices (to be set by admin via updateLevelPrices)
+        // Admin must call updateLevelPrices([...]) after deployment
+        // Prices should be in BNB (wei)
 
         // Admin fee: 5% for Level 1 (registration), 5% for Levels 2-13 (upgrades)
         // Level 1: 95% to sponsor, 5% admin fee
@@ -298,8 +284,8 @@ contract UniversalMatrix is
         uint256 upline = userInfo[_user].upline;
         bool paid = false;
 
-        // Navigate to the correct starting position
-        for (uint256 i = 0; i < MAX_LAYERS; i++) {
+        // Search up to 13 layers for income distribution
+        for (uint256 i = 0; i < INCOME_LAYERS; i++) {
             if (i < _level - 1) {
                 upline = userInfo[upline].upline;
             } else {
@@ -342,9 +328,9 @@ contract UniversalMatrix is
             }
         }
 
-        // If we exhausted all layers without payment, send to root
+        // If no qualified upline found in 13 layers, send to root
         if (!paid) {
-            _payToRoot(_user, _level, MAX_LAYERS);
+            _payToRoot(_user, _level, INCOME_LAYERS);
         }
     }
 
@@ -386,7 +372,8 @@ contract UniversalMatrix is
             upline = _ref;
         } else {
             // Find available position in matrix
-            for (uint256 i = 0; i < MAX_LAYERS; i++) {
+            // Matrix placement can go unlimited layers
+            for (uint256 i = 0; i < 100; i++) { // Reasonable limit to prevent infinite loop
                 if (isFound) break;
                 if (teams[_ref][i + 1].length < 2 ** (i + 2)) {
                     for (uint256 j = 0; j < teams[_ref][i].length; j++) {
@@ -404,7 +391,8 @@ contract UniversalMatrix is
         }
 
         // Update team counts
-        for (uint256 i = 0; i < MAX_LAYERS; i++) {
+        // Update team counts unlimited layers
+        for (uint256 i = 0; i < 100; i++) { // Reasonable limit to prevent infinite loop
             if (upline == 0 || upline == defaultRefer) break;
             userInfo[upline].totalMatrixTeam += 1;
             teams[upline][i].push(_user);
