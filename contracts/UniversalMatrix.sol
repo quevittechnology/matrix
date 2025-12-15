@@ -34,7 +34,14 @@ contract UniversalMatrix is
     uint256 public constant DIRECT_REQUIRED = 2;
     uint256 public constant ROYALTY_DIST_TIME = 24 hours;
     uint256 public constant ROYALTY_PERCENT = 5; // 5% of deposits go to royalty
-
+    
+    // Sponsor commission: Direct sponsor earns % from downline upgrades
+    uint256 public sponsorCommissionPercent; // Configurable by admin
+    uint256 public sponsorMinLevel; // Minimum level to receive commission
+    
+    // Sponsor commission fallback options
+    enum SponsorFallback { ROOT_USER, ADMIN, ROYALTY_POOL }
+    SponsorFallback public sponsorFallback; // Configurable by admin
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -93,6 +100,7 @@ contract UniversalMatrix is
     mapping(address => uint256) public id;
     mapping(uint256 => Income[]) private incomeInfo;
     mapping(uint256 => uint256) public lostIncome;
+    mapping(uint256 => uint256) public sponsorIncome; // Track sponsor commission earnings
     mapping(uint256 => mapping(uint256 => uint256)) public dayIncome;
     
     uint256[] public globalUsers;
@@ -162,6 +170,11 @@ contract UniversalMatrix is
         // Royalty distribution: 40%, 30%, 20%, 10% for levels 10, 11, 12, 13
         royaltyPercent = [40, 30, 20, 10];
         royaltyLevel = [10, 11, 12, 13];
+        
+        // Initialize sponsor commission settings
+        sponsorCommissionPercent = 5; // Default 5%
+        sponsorMinLevel = 4; // Default Level 4
+        sponsorFallback = SponsorFallback.ROOT_USER; // Default fallback to root user
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -341,14 +354,49 @@ contract UniversalMatrix is
         uint256 _layer,
         bool _isLost
     ) private {
-        payable(userInfo[_recipient].account).transfer(levelPrice[_level]);
-        userInfo[_recipient].totalIncome += levelPrice[_level];
-        userInfo[_recipient].levelIncome += levelPrice[_level];
-        userInfo[_recipient].income[_level] += levelPrice[_level];
+        uint256 incomeAmount = levelPrice[_level];
+        
+        // Pay level income to recipient
+        payable(userInfo[_recipient].account).transfer(incomeAmount);
+        userInfo[_recipient].totalIncome += incomeAmount;
+        userInfo[_recipient].levelIncome += incomeAmount;
+        userInfo[_recipient].income[_level] += incomeAmount;
         incomeInfo[_recipient].push(
-            Income(_from, _layer, levelPrice[_level], block.timestamp, _isLost)
+            Income(_from, _layer, incomeAmount, block.timestamp, _isLost)
         );
-        dayIncome[_recipient][getUserCurDay(_recipient)] += levelPrice[_level];
+        dayIncome[_recipient][getUserCurDay(_recipient)] += incomeAmount;
+        
+        // Pay sponsor commission (5% of level income to direct sponsor)
+        // Sponsor must be Level 5+ to receive commission
+        if (userInfo[_recipient].referrer != 0 && userInfo[_recipient].referrer != defaultRefer) {
+            uint256 sponsor = userInfo[_recipient].referrer;
+            uint256 sponsorCommission = (incomeAmount * sponsorCommissionPercent) / 100;
+            
+            if (sponsorCommission > 0) {
+                if (userInfo[sponsor].level >= sponsorMinLevel) {
+                    // Sponsor is qualified (Level 5+)
+                    payable(userInfo[sponsor].account).transfer(sponsorCommission);
+                    userInfo[sponsor].totalIncome += sponsorCommission;
+                    sponsorIncome[sponsor] += sponsorCommission;
+                    dayIncome[sponsor][getUserCurDay(sponsor)] += sponsorCommission;
+                } else {
+                    // Sponsor not qualified - use fallback
+                    if (sponsorFallback == SponsorFallback.ROOT_USER) {
+                        // Send to root user
+                        payable(userInfo[defaultRefer].account).transfer(sponsorCommission);
+                        userInfo[defaultRefer].totalIncome += sponsorCommission;
+                        sponsorIncome[defaultRefer] += sponsorCommission;
+                    } else if (sponsorFallback == SponsorFallback.ADMIN) {
+                        // Send to admin/fee receiver
+                        payable(feeReceiver).transfer(sponsorCommission);
+                    } else if (sponsorFallback == SponsorFallback.ROYALTY_POOL) {
+                        // Add to royalty pool
+                        payable(address(royaltyVault)).transfer(sponsorCommission);
+                        _distributeRoyalty(sponsorCommission);
+                    }
+                }
+            }
+        }
     }
 
     function _payToRoot(uint256 _from, uint256 _level, uint256 _layer) private {
@@ -449,7 +497,20 @@ contract UniversalMatrix is
                 royaltyUsers[_royaltyTier];
 
             if (toDist > 0) {
-                royaltyVault.send(toDist);
+                // Pay sponsor commission (% of level income to direct sponsor)
+                // Sponsor must be Level 5+ to receive commission
+                if (userInfo[userId].referrer != 0 && userInfo[userId].referrer != defaultRefer) {
+                    uint256 sponsor = userInfo[userId].referrer;
+                    if (userInfo[sponsor].level >= sponsorMinLevel) {
+                        uint256 sponsorCommission = (toDist * sponsorCommissionPercent) / 100;
+                        if (sponsorCommission > 0) {
+                            payable(userInfo[sponsor].account).transfer(sponsorCommission);
+                            userInfo[sponsor].totalIncome += sponsorCommission;
+                            sponsorIncome[sponsor] += sponsorCommission;
+                            dayIncome[sponsor][getUserCurDay(sponsor)] += sponsorCommission;
+                        }
+                    }
+                }
                 payable(userInfo[userId].account).transfer(toDist);
                 userInfo[userId].royaltyIncome += toDist;
                 userInfo[userId].totalIncome += toDist;
@@ -664,9 +725,23 @@ contract UniversalMatrix is
         emit Paused(_paused);
     }
 
-    function setFeeReceiver(address _newReceiver) external onlyOwner {
-        require(_newReceiver != address(0), "Invalid address");
-        feeReceiver = _newReceiver;
+    function setSponsorCommission(uint256 _percent) external onlyOwner {
+        require(_percent <= 100, "Invalid percentage");
+        sponsorCommissionPercent = _percent;
+    }
+
+    function setSponsorMinLevel(uint256 _level) external onlyOwner {
+        require(_level >= 1 && _level <= MAX_LEVEL, "Invalid level");
+        sponsorMinLevel = _level;
+    }
+
+    function setSponsorFallback(SponsorFallback _fallback) external onlyOwner {
+        sponsorFallback = _fallback;
+    }
+
+    function setFeeReceiver(address _feeReceiver) external onlyOwner {
+        require(_feeReceiver != address(0), "Invalid address");
+        feeReceiver = _feeReceiver;
     }
 
     function setRoyaltyVault(address _newVault) external onlyOwner {
