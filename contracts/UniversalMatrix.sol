@@ -56,11 +56,11 @@ contract UniversalMatrix is
     // Distribution percentages - Configurable by admin
     uint256 public registrationSponsorPercent; // % to sponsor on registration
     uint256 public upgradeIncomePercent; // % to income distribution on upgrade
+    uint256 public upgradeSponsorPercent; // % sponsor commission on upgrade (deducted from income)
     uint256 public upgradeAdminPercent; // % admin fee on upgrade
     uint256 public upgradeRoyaltyPercent; // % royalty on upgrade
     
-    // Sponsor commission: Direct sponsor earns % from downline upgrades
-    uint256 public sponsorCommissionPercent; // Configurable by admin
+    // Sponsor commission settings
     uint256 public sponsorMinLevel; // Minimum level to receive commission
     
     // Registration royalty: Configurable % of registration fee goes to royalty pool
@@ -195,7 +195,7 @@ contract UniversalMatrix is
     event LevelPricesUSDUpdated(uint256[13] newPricesUSD);
     event BNBPriceUpdated(uint256 newPrice, uint256 timestamp);
     event RegistrationDistributionUpdated(uint256 sponsorPercent, uint256 royaltyPercent);
-    event UpgradeDistributionUpdated(uint256 incomePercent, uint256 adminPercent, uint256 royaltyPercent);
+    event UpgradeDistributionUpdated(uint256 incomePercent, uint256 sponsorPercent, uint256 adminPercent, uint256 royaltyPercent);
     event MaxLevelUpdated(uint256 newMaxLevel);
     event RoiCapUpdated(uint256 newRoiCap);
     event IncomeLayersUpdated(uint256 newLayers);
@@ -256,12 +256,12 @@ contract UniversalMatrix is
         // Initialize distribution percentages
         registrationSponsorPercent = 90; // 90% to sponsor (after royalty deduction)
         registrationRoyaltyPercent = 5; // 5% royalty on registration
-        upgradeIncomePercent = 90; // 90% to income distribution
+        upgradeIncomePercent = 85; // 85% to income distribution (after sponsor commission)
+        upgradeSponsorPercent = 5; // 5% sponsor commission on upgrade
         upgradeAdminPercent = 5; // 5% admin fee on upgrade
         upgradeRoyaltyPercent = 5; // 5% royalty on upgrade
         
         // Initialize sponsor commission settings
-        sponsorCommissionPercent = 5; // Default 5%
         sponsorMinLevel = 4; // Default Level 4
         sponsorFallback = SponsorFallback.ROOT_USER; // Default fallback to root user
         
@@ -470,11 +470,11 @@ contract UniversalMatrix is
         );
         dayIncome[_recipient][getUserCurDay(_recipient)] += incomeAmount;
         
-        // Pay sponsor commission (5% of level income to direct sponsor)
+        // Pay sponsor commission (upgradeSponsorPercent% of level income to direct sponsor)
         // Sponsor must be Level 4+ to receive commission (Root user always qualifies)
         if (userInfo[_recipient].referrer != 0 && userInfo[_recipient].referrer != defaultRefer) {
             uint256 sponsor = userInfo[_recipient].referrer;
-            uint256 sponsorCommission = (incomeAmount * sponsorCommissionPercent) / 100;
+            uint256 sponsorCommission = (incomeAmount * upgradeSponsorPercent) / 100;
             
             if (sponsorCommission > 0) {
                 // Root user always qualifies, others need minimum level
@@ -632,7 +632,7 @@ contract UniversalMatrix is
                 if (userInfo[userId].referrer != 0 && userInfo[userId].referrer != defaultRefer) {
                     uint256 sponsor = userInfo[userId].referrer;
                     if (userInfo[sponsor].level >= sponsorMinLevel) {
-                        uint256 sponsorCommission = (toDist * sponsorCommissionPercent) / 100;
+                        uint256 sponsorCommission = (toDist * upgradeSponsorPercent) / 100;
                         if (sponsorCommission > 0) {
                             payable(userInfo[sponsor].account).transfer(sponsorCommission);
                             userInfo[sponsor].totalIncome += sponsorCommission;
@@ -819,6 +819,7 @@ contract UniversalMatrix is
         uint256 regSponsor,
         uint256 regRoyalty,
         uint256 upgIncome,
+        uint256 upgSponsor,
         uint256 upgAdmin,
         uint256 upgRoyalty
     ) {
@@ -826,6 +827,7 @@ contract UniversalMatrix is
             registrationSponsorPercent,
             registrationRoyaltyPercent,
             upgradeIncomePercent,
+            upgradeSponsorPercent,
             upgradeAdminPercent,
             upgradeRoyaltyPercent
         );
@@ -923,7 +925,7 @@ contract UniversalMatrix is
 
     function setSponsorCommission(uint256 _percent) external onlyOwner {
         require(_percent <= 100, "Invalid percentage");
-        sponsorCommissionPercent = _percent;
+        upgradeSponsorPercent = _percent;
     }
 
     function setSponsorMinLevel(uint256 _level) external onlyOwner {
@@ -976,14 +978,16 @@ contract UniversalMatrix is
 
     function setUpgradeDistribution(
         uint256 _incomePercent,
+        uint256 _sponsorPercent,
         uint256 _adminPercent,
         uint256 _royaltyPercent
     ) external onlyOwner {
-        require(_incomePercent + _adminPercent + _royaltyPercent == 100, "Must equal 100%");
+        require(_incomePercent + _sponsorPercent + _adminPercent + _royaltyPercent == 100, "Must equal 100%");
         upgradeIncomePercent = _incomePercent;
+        upgradeSponsorPercent = _sponsorPercent;
         upgradeAdminPercent = _adminPercent;
         upgradeRoyaltyPercent = _royaltyPercent;
-        emit UpgradeDistributionUpdated(_incomePercent, _adminPercent, _royaltyPercent);
+        emit UpgradeDistributionUpdated(_incomePercent, _sponsorPercent, _adminPercent, _royaltyPercent);
     }
 
     function setMaxLevel(uint256 _maxLevel) external onlyOwner {

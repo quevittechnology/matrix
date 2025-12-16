@@ -94,17 +94,17 @@ describe("Admin Settings", function () {
     describe("2. Sponsor Commission Percentage", function () {
         it("Should update sponsor commission percentage", async function () {
             await matrix.connect(owner).setSponsorCommission(7);
-            expect(await matrix.sponsorCommissionPercent()).to.equal(7);
+            expect(await matrix.upgradeSponsorPercent()).to.equal(7);
         });
 
         it("Should accept 0% commission", async function () {
             await matrix.connect(owner).setSponsorCommission(0);
-            expect(await matrix.sponsorCommissionPercent()).to.equal(0);
+            expect(await matrix.upgradeSponsorPercent()).to.equal(0);
         });
 
         it("Should accept 100% commission", async function () {
             await matrix.connect(owner).setSponsorCommission(100);
-            expect(await matrix.sponsorCommissionPercent()).to.equal(100);
+            expect(await matrix.upgradeSponsorPercent()).to.equal(100);
         });
 
         it("Should revert if percentage > 100", async function () {
@@ -326,7 +326,7 @@ describe("Admin Settings", function () {
             expect(fees.length).to.equal(13);
 
             // Check sponsor settings
-            const sponsorPercent = await matrix.sponsorCommissionPercent();
+            const sponsorPercent = await matrix.upgradeSponsorPercent();
             const sponsorMinLevel = await matrix.sponsorMinLevel();
             const sponsorFallback = await matrix.sponsorFallback();
             expect(sponsorPercent).to.equal(5); // Default
@@ -373,7 +373,7 @@ describe("Admin Settings", function () {
             // Verify all updates
             const [prices] = await matrix.getLevels();
             expect(prices[0]).to.equal(newPrices[0]);
-            expect(await matrix.sponsorCommissionPercent()).to.equal(7);
+            expect(await matrix.upgradeSponsorPercent()).to.equal(7);
             expect(await matrix.sponsorMinLevel()).to.equal(5);
             expect(await matrix.sponsorFallback()).to.equal(1);
             expect(await matrix.feeReceiver()).to.equal(newFeeReceiver.address);
