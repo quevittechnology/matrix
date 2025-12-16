@@ -968,11 +968,10 @@ contract UniversalMatrix is
             uint80,
             int256 answer,
             uint256,
-            uint256 updatedAt,
+            uint256,
             uint80
         ) {
             require(answer > 0, "Invalid price from oracle");
-            require(block.timestamp - updatedAt <= 24 hours, "Oracle price is stale");
             
             // Update cache
             cachedBNBPrice = uint256(answer);
@@ -1006,11 +1005,10 @@ contract UniversalMatrix is
             uint80,
             int256 answer,
             uint256,
-            uint256 updatedAt,
+            uint256,
             uint80
         ) {
             require(answer > 0, "Invalid price from oracle");
-            require(block.timestamp - updatedAt <= 24 hours, "Oracle price is stale");
             
             // Update cache
             cachedBNBPrice = uint256(answer);
