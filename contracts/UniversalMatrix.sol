@@ -399,13 +399,6 @@ contract UniversalMatrix is
                 paid = true;
                 break;
             }
-            
-            if (upline == defaultRefer) {
-                // Reached root user, always pay
-                _payIncome(upline, _user, _level, i + 1, false);
-                paid = true;
-                break;
-            }
 
             // Check if upline is qualified
             // Root user is always qualified (no requirements)
@@ -414,12 +407,12 @@ contract UniversalMatrix is
                                userInfo[upline].directTeam >= DIRECT_REQUIRED);
             
             if (isQualified) {
-                // Qualified - send income
+                // ✅ Qualified (including root) - send income, NO lostIncome recorded
                 _payIncome(upline, _user, _level, i + 1, false);
                 paid = true;
                 break;
             } else {
-                // Not qualified - track as lost and continue searching
+                // ❌ Not qualified - record as lost income and continue searching
                 lostIncome[upline] += levelPrice[_level];
                 incomeInfo[upline].push(
                     Income(_user, i + 1, levelPrice[_level], block.timestamp, true)
