@@ -46,6 +46,9 @@ contract UniversalMatrix is
     uint256 public sponsorCommissionPercent; // Configurable by admin
     uint256 public sponsorMinLevel; // Minimum level to receive commission
     
+    // Registration royalty: Configurable % of registration fee goes to royalty pool
+    uint256 public registrationRoyaltyPercent; // Configurable by admin (default 5%)
+    
     // Sponsor commission fallback options
     enum SponsorFallback { ROOT_USER, ADMIN, ROYALTY_POOL }
     SponsorFallback public sponsorFallback; // Configurable by admin
@@ -152,6 +155,7 @@ contract UniversalMatrix is
     event FeeReceiverUpdated(address indexed oldReceiver, address indexed newReceiver);
     event RoyaltyVaultUpdated(address indexed oldVault, address indexed newVault);
     event RoyaltyDirectRequiredUpdated(uint256[4] newRequirements);
+    event RegistrationRoyaltyUpdated(uint256 newPercent);
 
     /*//////////////////////////////////////////////////////////////
                         INITIALIZER
@@ -198,6 +202,7 @@ contract UniversalMatrix is
         sponsorCommissionPercent = 5; // Default 5%
         sponsorMinLevel = 4; // Default Level 4
         sponsorFallback = SponsorFallback.ROOT_USER; // Default fallback to root user
+        registrationRoyaltyPercent = 5; // Default 5% royalty on registration
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -223,12 +228,16 @@ contract UniversalMatrix is
         user.level = 1;
         user.totalDeposit = levelPrice[0];
 
-        // Pay referral commission (95% to sponsor, 5% admin fee, no royalty on registration)
+        // Pay referral commission
         if (user.referrer != defaultRefer) {
             userInfo[user.referrer].directTeam += 1;
             directTeam[user.referrer].push(user.id);
 
-            uint256 sponsorAmount = (levelPrice[0] * REGISTRATION_SPONSOR_PERCENT) / 100;
+            // Calculate amounts based on configurable royalty
+            uint256 royaltyAmount = (levelPrice[0] * registrationRoyaltyPercent) / 100;
+            uint256 sponsorAmount = levelPrice[0] - royaltyAmount; // Sponsor gets remainder after royalty
+            
+            // Pay sponsor
             payable(userInfo[user.referrer].account).transfer(sponsorAmount);
             incomeInfo[user.referrer].push(
                 Income(user.id, 1, sponsorAmount, block.timestamp, false)
@@ -237,6 +246,11 @@ contract UniversalMatrix is
             userInfo[user.referrer].referralIncome += sponsorAmount;
             userInfo[user.referrer].income[0] += sponsorAmount;
             dayIncome[user.referrer][getUserCurDay(user.referrer)] += sponsorAmount;
+            
+            // Distribute royalty if configured
+            if (royaltyAmount > 0) {
+                _distributeRoyalty(royaltyAmount);
+            }
         }
 
         // Place in matrix
@@ -247,7 +261,7 @@ contract UniversalMatrix is
         totalUsers += 1;
 
 
-        // Send admin fee only (no royalty on registration)
+        // Send admin fee
         payable(feeReceiver).transfer(address(this).balance);
 
         // Record activity
@@ -775,6 +789,12 @@ contract UniversalMatrix is
         }
         royaltyDirectRequired = _requirements;
         emit RoyaltyDirectRequiredUpdated(_requirements);
+    }
+
+    function setRegistrationRoyalty(uint256 _percent) external onlyOwner {
+        require(_percent <= 100, "Invalid percentage");
+        registrationRoyaltyPercent = _percent;
+        emit RegistrationRoyaltyUpdated(_percent);
     }
 
     function emergencyWithdraw() external onlyOwner {
