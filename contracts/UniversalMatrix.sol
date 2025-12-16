@@ -571,9 +571,10 @@ contract UniversalMatrix is
 
     function _checkRoyaltyQualification(uint256 _ref) private {
         for (uint256 i = 0; i < royaltyLevel.length; i++) {
-            // 150% ROI cap on royalty income only
-            bool hasRoyaltyCapacity = userInfo[_ref].royaltyIncome < 
-                (userInfo[_ref].totalDeposit * ROI_CAP_PERCENT) / 100;
+            // 150% ROI cap on royalty income only (root user unlimited)
+            bool hasRoyaltyCapacity = (_ref == defaultRefer) || // Root unlimited
+                (userInfo[_ref].royaltyIncome < 
+                (userInfo[_ref].totalDeposit * ROI_CAP_PERCENT) / 100);
             
             if (
                 userInfo[_ref].level > lastLevel[_ref] &&
@@ -600,8 +601,8 @@ contract UniversalMatrix is
         require(userId != 0, "Not registered");
         require(isRoyaltyAvl(userId, _royaltyTier), "Not eligible");
 
-        // 150% ROI cap on royalty income only
-        if (userInfo[userId].royaltyIncome < (userInfo[userId].totalDeposit * ROI_CAP_PERCENT) / 100) {
+        // 150% ROI cap on royalty income only (root user unlimited)
+        if (userId == defaultRefer || userInfo[userId].royaltyIncome < (userInfo[userId].totalDeposit * ROI_CAP_PERCENT) / 100) {
             uint256 toDist = royalty[getCurRoyaltyDay() - 1][_royaltyTier] /
                 royaltyUsers[_royaltyTier];
 
@@ -632,8 +633,9 @@ contract UniversalMatrix is
             }
         }
 
-        // Remove from royalty pool if 150% cap reached
+        // Remove from royalty pool if 150% cap reached (root user never removed)
         if (
+            userId != defaultRefer && // Root user never removed
             royaltyActive[userId][_royaltyTier] &&
             userInfo[userId].royaltyIncome >= (userInfo[userId].totalDeposit * ROI_CAP_PERCENT) / 100
         ) {
@@ -656,10 +658,10 @@ contract UniversalMatrix is
 
         uint256[] memory users = getPendingRoyaltyUsers(_royaltyTier);
         for (uint256 i = 0; i < users.length; i++) {
-            // 150% ROI cap on royalty income only
+            // 150% ROI cap on royalty income only (root user unlimited)
             if (
                 userInfo[users[i]].level == royaltyLevel[_royaltyTier] &&
-                userInfo[users[i]].royaltyIncome < (userInfo[users[i]].totalDeposit * ROI_CAP_PERCENT) / 100
+                (users[i] == defaultRefer || userInfo[users[i]].royaltyIncome < (userInfo[users[i]].totalDeposit * ROI_CAP_PERCENT) / 100)
             ) {
                 royaltyActive[users[i]][_royaltyTier] = true;
                 royaltyUsers[_royaltyTier] += 1;
