@@ -228,6 +228,12 @@ contract UniversalMatrix is
         require(!paused, "Contract paused");
         require(id[_newAcc] == 0, "Already registered");
         require(userInfo[_ref].start > 0 || _ref == defaultRefer, "Invalid referrer");
+        
+        // If no parent specified, default to root user
+        if (_parentId == 0) {
+            _parentId = defaultRefer;
+        }
+        
         require(matrix[_parentId].exists, "Invalid matrix parent");
 
         uint256 requiredAmount = levelPrice[0] + ((levelPrice[0] * levelFeePercent[0]) / 100);
