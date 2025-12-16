@@ -86,7 +86,7 @@ describe("Admin Settings", function () {
             const cost = levelPrices[0] + (levelPrices[0] * levelFees[0] / 100n);
 
             await expect(
-                matrix.connect(user1).register(defaultRefer, user1.address, { value: cost })
+                matrix.connect(user1).register(defaultRefer, defaultRefer, user1.address, { value: cost })
             ).to.emit(matrix, "Registered");
         });
     });
@@ -204,7 +204,7 @@ describe("Admin Settings", function () {
             const adminFee = (levelPrices[0] * levelFees[0]) / 100n;
 
             const balanceBefore = await ethers.provider.getBalance(newFeeReceiver.address);
-            await matrix.connect(user1).register(defaultRefer, user1.address, { value: cost });
+            await matrix.connect(user1).register(defaultRefer, defaultRefer, user1.address, { value: cost });
             const balanceAfter = await ethers.provider.getBalance(newFeeReceiver.address);
 
             // Fee receiver should receive at least the admin fee
@@ -262,7 +262,7 @@ describe("Admin Settings", function () {
             const cost = levelPrices[0] + (levelPrices[0] * levelFees[0] / 100n);
 
             await expect(
-                matrix.connect(user1).register(defaultRefer, user1.address, { value: cost })
+                matrix.connect(user1).register(defaultRefer, defaultRefer, user1.address, { value: cost })
             ).to.be.revertedWith("Contract paused");
         });
 
@@ -270,7 +270,7 @@ describe("Admin Settings", function () {
             const defaultRefer = await matrix.defaultRefer();
             const cost = levelPrices[0] + (levelPrices[0] * levelFees[0] / 100n);
 
-            await matrix.connect(user1).register(defaultRefer, user1.address, { value: cost });
+            await matrix.connect(user1).register(defaultRefer, defaultRefer, user1.address, { value: cost });
             const userId = await matrix.id(user1.address);
 
             await matrix.connect(owner).setPaused(true);
@@ -293,7 +293,7 @@ describe("Admin Settings", function () {
             // Add some balance to contract
             const defaultRefer = await matrix.defaultRefer();
             const cost = levelPrices[0] + (levelPrices[0] * levelFees[0] / 100n);
-            await matrix.connect(user1).register(defaultRefer, user1.address, { value: cost });
+            await matrix.connect(user1).register(defaultRefer, defaultRefer, user1.address, { value: cost });
 
             const contractBalance = await ethers.provider.getBalance(await matrix.getAddress());
             const ownerBalanceBefore = await ethers.provider.getBalance(owner.address);

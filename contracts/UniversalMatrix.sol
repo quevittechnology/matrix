@@ -120,6 +120,14 @@ contract UniversalMatrix is
     /*//////////////////////////////////////////////////////////////
                         BINARY MATRIX DATA
     //////////////////////////////////////////////////////////////*/
+    struct MatrixNode {
+        uint256 parent;
+        uint256 left;
+        uint256 right;
+        bool exists;
+    }
+    
+    mapping(uint256 => MatrixNode) public matrix;
     mapping(uint256 => mapping(uint256 => uint256[])) private teams;
     mapping(uint256 => uint256[]) public directTeam;
     mapping(uint256 => uint256) private matrixDirect;
@@ -203,15 +211,24 @@ contract UniversalMatrix is
         sponsorMinLevel = 4; // Default Level 4
         sponsorFallback = SponsorFallback.ROOT_USER; // Default fallback to root user
         registrationRoyaltyPercent = 5; // Default 5% royalty on registration
+        
+        // Initialize root matrix node
+        matrix[defaultRefer] = MatrixNode({
+            parent: 0,
+            left: 0,
+            right: 0,
+            exists: true
+        });
     }
 
     /*//////////////////////////////////////////////////////////////
                         REGISTRATION
     //////////////////////////////////////////////////////////////*/
-    function register(uint256 _ref, address _newAcc) external payable nonReentrant {
+    function register(uint256 _ref, uint256 _parentId, address _newAcc) external payable nonReentrant {
         require(!paused, "Contract paused");
         require(id[_newAcc] == 0, "Already registered");
         require(userInfo[_ref].start > 0 || _ref == defaultRefer, "Invalid referrer");
+        require(matrix[_parentId].exists, "Invalid matrix parent");
 
         uint256 requiredAmount = levelPrice[0] + ((levelPrice[0] * levelFeePercent[0]) / 100);
         require(msg.value == requiredAmount, "Invalid BNB amount");
@@ -253,11 +270,9 @@ contract UniversalMatrix is
             }
         }
 
-        // Place in matrix
+        // Place in matrix with manual parent selection
         globalUsers.push(user.id);
-        if (totalUsers > 0 && user.referrer != defaultRefer) {
-            _placeInMatrix(user.id, user.referrer);
-        }
+        _placeInMatrix(user.id, _parentId);
         totalUsers += 1;
 
 
@@ -438,45 +453,40 @@ contract UniversalMatrix is
     /*//////////////////////////////////////////////////////////////
                     MATRIX PLACEMENT
     //////////////////////////////////////////////////////////////*/
-    function _placeInMatrix(uint256 _user, uint256 _ref) private {
-        bool isFound;
-        uint256 upline;
+    function _placeInMatrix(uint256 _user, uint256 _parentId) private {
+        require(!matrix[_user].exists, "Already placed in matrix");
+        require(matrix[_parentId].exists, "Parent not in matrix");
 
-        // Check if referrer has space
-        if (matrixDirect[_ref] < 2) {
-            userInfo[_user].upline = _ref;
-            matrixDirect[_ref] += 1;
-            upline = _ref;
+        // Place user as left or right child
+        if (matrix[_parentId].left == 0) {
+            matrix[_parentId].left = _user;
+        } else if (matrix[_parentId].right == 0) {
+            matrix[_parentId].right = _user;
         } else {
-            // Find available position in matrix
-            // Matrix placement can go unlimited layers
-            for (uint256 i = 0; i < 100; i++) { // Reasonable limit to prevent infinite loop
-                if (isFound) break;
-                if (teams[_ref][i + 1].length < 2 ** (i + 2)) {
-                    for (uint256 j = 0; j < teams[_ref][i].length; j++) {
-                        if (isFound) break;
-                        uint256 temp = teams[_ref][i][j];
-                        if (matrixDirect[temp] < 2) {
-                            userInfo[_user].upline = temp;
-                            matrixDirect[temp] += 1;
-                            upline = temp;
-                            isFound = true;
-                        }
-                    }
-                }
-            }
+            revert("Matrix parent is full");
         }
 
-        // Update team counts
-        // Update team counts unlimited layers
-        for (uint256 i = 0; i < 100; i++) { // Reasonable limit to prevent infinite loop
-            if (upline == 0 || upline == defaultRefer) break;
+        // Create matrix node for user
+        matrix[_user] = MatrixNode({
+            parent: _parentId,
+            left: 0,
+            right: 0,
+            exists: true
+        });
+
+        // Set upline in user info
+        userInfo[_user].upline = _parentId;
+
+        // Update team counts up the matrix chain
+        uint256 upline = _parentId;
+        for (uint256 i = 0; i < 100 && upline != 0; i++) {
             userInfo[upline].totalMatrixTeam += 1;
             teams[upline][i].push(_user);
             upline = userInfo[upline].upline;
+            if (upline == defaultRefer) break;
         }
 
-        emit MatrixPlaced(_user, userInfo[_user].upline);
+        emit MatrixPlaced(_user, _parentId);
     }
 
     /*//////////////////////////////////////////////////////////////
