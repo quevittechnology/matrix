@@ -42,13 +42,15 @@ contract UniversalMatrix is
     /*//////////////////////////////////////////////////////////////
                             CONSTANTS
     //////////////////////////////////////////////////////////////*/
-    uint256 public constant ROYALTY_DIST_TIME = 24 hours;
+    // No hardcoded constants - all parameters now configurable!
     
     // Admin-configurable system parameters
     uint256 public maxLevel; // Maximum upgrade level
     uint256 public roiCapPercent; // ROI cap percentage (e.g., 150 = 150%)
     uint256 public incomeLayers; // Income distribution depth (layers to search)
     uint256 public directRequired; // Minimum direct referrals for qualification
+    uint256 public royaltyDistTime; // Royalty distribution cycle time (seconds)
+    uint256 public priceValidityPeriod; // How long cached BNB price remains valid (seconds)
     
     
     // Distribution percentages - Configurable by admin
@@ -75,9 +77,7 @@ contract UniversalMatrix is
     
     // Cached price (updated manually, e.g., every Sunday)
     uint256 public cachedBNBPrice; // Cached BNB/USD price (8 decimals)
-    uint256 public lastPriceUpdate; // Timestamp of last price update
-    uint256 public priceValidityPeriod; // How long cached price is valid (e.g., 7 days)
-    
+    uint256 public lastPriceUpdate; // Timestamp of last price update    
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -200,6 +200,9 @@ contract UniversalMatrix is
     event RoiCapUpdated(uint256 newRoiCap);
     event IncomeLayersUpdated(uint256 newLayers);
     event DirectRequiredUpdated(uint256 newRequired);
+    event RoyaltyDistTimeUpdated(uint256 newDistTime);
+    event RoyaltyLevelsUpdated(uint256[4] newLevels);
+    event PriceValidityPeriodUpdated(uint256 newPeriod);
 
     /*//////////////////////////////////////////////////////////////
                         INITIALIZER
@@ -247,6 +250,8 @@ contract UniversalMatrix is
         roiCapPercent = 150; // 150% ROI cap
         incomeLayers = 13; // Search up to 13 layers for income
         directRequired = 2; // Minimum 2 direct referrals
+        royaltyDistTime = 24 hours; // 24 hour royalty distribution cycle
+        priceValidityPeriod = 7 days; // Price valid for 7 days
         
         // Initialize distribution percentages
         registrationSponsorPercent = 90; // 90% to sponsor (after royalty deduction)
@@ -261,7 +266,6 @@ contract UniversalMatrix is
         sponsorFallback = SponsorFallback.ROOT_USER; // Default fallback to root user
         
         // Initialize price cache settings
-        priceValidityPeriod = 7 days; // Price valid for 7 days
         cachedBNBPrice = 0; // No cached price initially (use fixed prices)
         lastPriceUpdate = 0;
         
@@ -853,11 +857,11 @@ contract UniversalMatrix is
     }
 
     function getRoyaltyTime() external view returns (uint256) {
-        return startTime + (ROYALTY_DIST_TIME * (getCurRoyaltyDay() + 1));
+        return startTime + (royaltyDistTime * (getCurRoyaltyDay() + 1));
     }
 
     function getCurRoyaltyDay() public view returns (uint256) {
-        return (block.timestamp - startTime) / ROYALTY_DIST_TIME;
+        return block.timestamp / royaltyDistTime;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -1005,6 +1009,23 @@ contract UniversalMatrix is
         directRequired = _required;
         emit DirectRequiredUpdated(_required);
     }
+
+    function setRoyaltyDistTime(uint256 _distTime) external onlyOwner {
+        require(_distTime >= 1 hours && _distTime <= 7 days, "Dist time must be 1h-7d");
+        royaltyDistTime = _distTime;
+        emit RoyaltyDistTimeUpdated(_distTime);
+    }
+
+    function setRoyaltyLevels(uint256[4] memory _levels) external onlyOwner {
+        // Validate levels are within maxLevel and in ascending order
+        require(_levels[0] >= 1 && _levels[0] <= maxLevel, "Invalid level");
+        for (uint256 i = 1; i < 4; i++) {
+            require(_levels[i] > _levels[i-1] && _levels[i] <= maxLevel, "Levels must be ascending");
+        }
+        royaltyLevel = _levels;
+        emit RoyaltyLevelsUpdated(_levels);
+    }
+
 
     function setPriceFeed(address _priceFeed) external onlyOwner {
         require(_priceFeed != address(0), "Invalid address");
