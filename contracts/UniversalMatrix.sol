@@ -372,8 +372,10 @@ contract UniversalMatrix is
             }
 
             // Check if upline is qualified
-            bool isQualified = userInfo[upline].level > _level && 
-                              userInfo[upline].directTeam >= DIRECT_REQUIRED;
+            // Root user is always qualified (no requirements)
+            bool isQualified = (upline == defaultRefer) || 
+                              (userInfo[upline].level > _level && 
+                               userInfo[upline].directTeam >= DIRECT_REQUIRED);
             
             if (isQualified) {
                 // Qualified - send income
@@ -417,14 +419,15 @@ contract UniversalMatrix is
         dayIncome[_recipient][getUserCurDay(_recipient)] += incomeAmount;
         
         // Pay sponsor commission (5% of level income to direct sponsor)
-        // Sponsor must be Level 5+ to receive commission
+        // Sponsor must be Level 4+ to receive commission (Root user always qualifies)
         if (userInfo[_recipient].referrer != 0 && userInfo[_recipient].referrer != defaultRefer) {
             uint256 sponsor = userInfo[_recipient].referrer;
             uint256 sponsorCommission = (incomeAmount * sponsorCommissionPercent) / 100;
             
             if (sponsorCommission > 0) {
-                if (userInfo[sponsor].level >= sponsorMinLevel) {
-                    // Sponsor is qualified (Level 5+)
+                // Root user always qualifies, others need minimum level
+                if (sponsor == defaultRefer || userInfo[sponsor].level >= sponsorMinLevel) {
+                    // Sponsor is qualified (Root or Level 4+)
                     payable(userInfo[sponsor].account).transfer(sponsorCommission);
                     userInfo[sponsor].totalIncome += sponsorCommission;
                     sponsorIncome[sponsor] += sponsorCommission;
@@ -441,7 +444,6 @@ contract UniversalMatrix is
                         payable(feeReceiver).transfer(sponsorCommission);
                     } else if (sponsorFallback == SponsorFallback.ROYALTY_POOL) {
                         // Add to royalty pool
-                        payable(address(royaltyVault)).transfer(sponsorCommission);
                         _distributeRoyalty(sponsorCommission);
                     }
                 }
