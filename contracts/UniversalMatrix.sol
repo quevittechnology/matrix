@@ -170,6 +170,9 @@ contract UniversalMatrix is
     mapping(uint256 => mapping(uint256 => uint256)) private royaltyDist;
     mapping(uint256 => mapping(uint256 => bool)) public royaltyTaken;
     mapping(uint256 => mapping(uint256 => bool)) public royaltyActive;
+    
+    // Root user special royalty accumulation (never expires, never rolls over)
+    mapping(uint256 => uint256) public rootUserPendingRoyalty; // tier => pending amount for root
 
     /*//////////////////////////////////////////////////////////////
                             EVENTS
@@ -178,6 +181,7 @@ contract UniversalMatrix is
     event Upgraded(address indexed user, uint256 indexed userId, uint256 newLevel);
     event RewardAdded(address indexed user, uint256 amount, string source);
     event RoyaltyClaimed(address indexed user, uint256 amount, uint256 tier);
+    event RootRoyaltyClaimed(uint256 amount, uint256 tier);
     event Paused(bool status);
     event MatrixPlaced(uint256 indexed userId, uint256 indexed uplineId);
     
@@ -580,8 +584,11 @@ contract UniversalMatrix is
                         royaltyDist[curDay][i] += rootShare;
                         incomeInfo[defaultRefer].push(Income(defaultRefer, 0, rootShare, block.timestamp, false));
                         dayIncome[defaultRefer][getUserCurDay(defaultRefer)] += rootShare;
+                    } else {
+                        // If transfer fails, accumulate for root user (NEVER expires, NEVER rolls over)
+                        rootUserPendingRoyalty[i] += rootShare;
+                        royaltyDist[curDay][i] += rootShare; // Mark as distributed
                     }
-                    // If transfer fails, funds stay in royalty pool for manual claim
                 }
             }
         }
@@ -857,6 +864,39 @@ contract UniversalMatrix is
 
     function getUserCurDay(uint256 _id) public view returns (uint256) {
         return (block.timestamp - userInfo[_id].start) / (24 hours);
+    }
+
+    /**
+     * @dev Root user claims accumulated royalty from failed auto-transfers
+     * @param _tier Royalty tier to claim from (0-3)
+     */
+    function claimRootRoyalty(uint256 _tier) external nonReentrant {
+        require(msg.sender == userInfo[defaultRefer].account, "Only root user");
+        require(_tier < royaltyLevel.length, "Invalid tier");
+        
+        uint256 amount = rootUserPendingRoyalty[_tier];
+        require(amount > 0, "No pending royalty");
+        
+        rootUserPendingRoyalty[_tier] = 0;
+        
+        payable(msg.sender).transfer(amount);
+        userInfo[defaultRefer].royaltyIncome += amount;
+        userInfo[defaultRefer].totalIncome += amount;
+        incomeInfo[defaultRefer].push(Income(defaultRefer, 0, amount, block.timestamp, false));
+        dayIncome[defaultRefer][getUserCurDay(defaultRefer)] += amount;
+        
+        emit RootRoyaltyClaimed(amount, _tier);
+    }
+
+    /**
+     * @dev Get root user's pending royalty for all tiers
+     */
+    function getRootPendingRoyalty() external view returns (uint256[4] memory) {
+        uint256[4] memory pending;
+        for (uint256 i = 0; i < 4; i++) {
+            pending[i] = rootUserPendingRoyalty[i];
+        }
+        return pending;
     }
 
     // Affiliate Link Utilities
