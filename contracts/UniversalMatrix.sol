@@ -10,6 +10,20 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /*//////////////////////////////////////////////////////////////
+                    CHAINLINK PRICE FEED
+//////////////////////////////////////////////////////////////*/
+interface AggregatorV3Interface {
+    function latestRoundData() external view returns (
+        uint80 roundId,
+        int256 answer,
+        uint256 startedAt,
+        uint256 updatedAt,
+        uint80 answeredInRound
+    );
+    function decimals() external view returns (uint8);
+}
+
+/*//////////////////////////////////////////////////////////////
                     ROYALTY VAULT INTERFACE
 //////////////////////////////////////////////////////////////*/
 interface IRoyaltyVault {
@@ -52,6 +66,12 @@ contract UniversalMatrix is
     // Sponsor commission fallback options
     enum SponsorFallback { ROOT_USER, ADMIN, ROYALTY_POOL }
     SponsorFallback public sponsorFallback; // Configurable by admin
+    
+    // Price Oracle for USD-stable pricing
+    AggregatorV3Interface public priceFeed; // BNB/USD Chainlink oracle
+    bool public useOracle; // Toggle oracle on/off
+    uint256[13] public levelPriceUSD; // Target USD price per level (in cents, e.g., 1000 = $10)
+    
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -164,6 +184,9 @@ contract UniversalMatrix is
     event RoyaltyVaultUpdated(address indexed oldVault, address indexed newVault);
     event RoyaltyDirectRequiredUpdated(uint256[4] newRequirements);
     event RegistrationRoyaltyUpdated(uint256 newPercent);
+    event PriceFeedUpdated(address indexed newPriceFeed);
+    event UseOracleUpdated(bool enabled);
+    event LevelPricesUSDUpdated(uint256[13] newPricesUSD);
 
     /*//////////////////////////////////////////////////////////////
                         INITIALIZER
@@ -236,7 +259,8 @@ contract UniversalMatrix is
         
         require(matrix[_parentId].exists, "Invalid matrix parent");
 
-        uint256 requiredAmount = levelPrice[0] + ((levelPrice[0] * levelFeePercent[0]) / 100);
+        uint256 price = getLevelPrice(0); // Get dynamic or fixed price
+        uint256 requiredAmount = price + ((price * levelFeePercent[0]) / 100);
         require(msg.value == requiredAmount, "Invalid BNB amount");
 
         // Generate new user ID
@@ -249,7 +273,7 @@ contract UniversalMatrix is
         user.referrer = _ref;
         user.start = block.timestamp;
         user.level = 1;
-        user.totalDeposit = levelPrice[0];
+        user.totalDeposit = price;
 
         // Pay referral commission
         if (user.referrer != defaultRefer) {
@@ -257,8 +281,8 @@ contract UniversalMatrix is
             directTeam[user.referrer].push(user.id);
 
             // Calculate amounts based on configurable royalty
-            uint256 royaltyAmount = (levelPrice[0] * registrationRoyaltyPercent) / 100;
-            uint256 sponsorAmount = levelPrice[0] - royaltyAmount; // Sponsor gets remainder after royalty
+            uint256 royaltyAmount = (price * registrationRoyaltyPercent) / 100;
+            uint256 sponsorAmount = price - royaltyAmount; // Sponsor gets remainder after royalty
             
             // Pay sponsor
             payable(userInfo[user.referrer].account).transfer(sponsorAmount);
@@ -310,8 +334,9 @@ contract UniversalMatrix is
 
         // Calculate total cost
         for (uint256 i = initialLvl; i < initialLvl + _lvls; i++) {
-            totalAmount += levelPrice[i];
-            adminCharge += (levelPrice[i] * levelFeePercent[i]) / 100;
+            uint256 price = getLevelPrice(i);
+            totalAmount += price;
+            adminCharge += (price * levelFeePercent[i]) / 100;
         }
 
         uint256 amount = totalAmount + adminCharge;
@@ -765,6 +790,63 @@ contract UniversalMatrix is
     }
 
     /*//////////////////////////////////////////////////////////////
+                        PRICE ORACLE FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+    /**
+     * @dev Get current BNB/USD price from Chainlink oracle
+     * @return price BNB price in USD with 8 decimals (e.g., 60000000000 = $600)
+     */
+    function getBNBPrice() public view returns (uint256) {
+        if (!useOracle || address(priceFeed) == address(0)) {
+            return 0;
+        }
+        
+        try priceFeed.latestRoundData() returns (
+            uint80,
+            int256 answer,
+            uint256,
+            uint256 updatedAt,
+            uint80
+        ) {
+            require(answer > 0, "Invalid price");
+            
+            // Check if price is stale (older than 24 hours)
+            require(block.timestamp - updatedAt <= 24 hours, "Price data is stale");
+            
+            return uint256(answer);
+        } catch {
+            return 0;
+        }
+    }
+
+    /**
+     * @dev Get level price in BNB dynamically calculated from USD target
+     * @param _level Level index (0-12)
+     * @return BNB amount required for the level
+     */
+    function getLevelPrice(uint256 _level) public view returns (uint256) {
+        require(_level < MAX_LEVEL, "Invalid level");
+        
+        // If oracle disabled, use fixed BNB prices
+        if (!useOracle) {
+            return levelPrice[_level];
+        }
+        
+        // Get current BNB price
+        uint256 bnbPrice = getBNBPrice();
+        if (bnbPrice == 0) {
+            // Fallback to fixed price if oracle fails
+            return levelPrice[_level];
+        }
+        
+        // Calculate BNB needed: (USD_cents * 1e18 * 1e8) / (BNB_price * 100)
+        // levelPriceUSD is in cents, bnbPrice has 8 decimals
+        uint256 bnbNeeded = (levelPriceUSD[_level] * 1e18 * 1e8) / (bnbPrice * 100);
+        
+        return bnbNeeded;
+    }
+
+    /*//////////////////////////////////////////////////////////////
                         ADMIN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
     function setPaused(bool _paused) external onlyOwner {
@@ -813,6 +895,26 @@ contract UniversalMatrix is
         require(_percent <= 100, "Invalid percentage");
         registrationRoyaltyPercent = _percent;
         emit RegistrationRoyaltyUpdated(_percent);
+    }
+
+    function setPriceFeed(address _priceFeed) external onlyOwner {
+        require(_priceFeed != address(0), "Invalid address");
+        priceFeed = AggregatorV3Interface(_priceFeed);
+        emit PriceFeedUpdated(_priceFeed);
+    }
+
+    function setUseOracle(bool _enabled) external onlyOwner {
+        useOracle = _enabled;
+        emit UseOracleUpdated(_enabled);
+    }
+
+    function setLevelPricesUSD(uint256[13] memory _pricesUSD) external onlyOwner {
+        // Validate prices (at least $1, max $100,000)
+        for (uint256 i = 0; i < _pricesUSD.length; i++) {
+            require(_pricesUSD[i] >= 100 && _pricesUSD[i] <= 10000000, "Invalid USD price");
+        }
+        levelPriceUSD = _pricesUSD;
+        emit LevelPricesUSDUpdated(_pricesUSD);
     }
 
     function emergencyWithdraw() external onlyOwner {
