@@ -538,9 +538,35 @@ contract UniversalMatrix is
     //////////////////////////////////////////////////////////////*/
     function _distributeRoyalty(uint256 royaltyAmt) private {
         uint256 curDay = getCurRoyaltyDay();
+        
+        // Distribute royalty across tiers
         for (uint256 i = 0; i < royaltyLevel.length; i++) {
-            royalty[curDay][i] += (royaltyAmt * royaltyPercent[i]) / 100;
+            uint256 tierAmount = (royaltyAmt * royaltyPercent[i]) / 100;
+            royalty[curDay][i] += tierAmount;
+            
+            // ✅ Auto-credit root user if they're in this tier (no claiming needed)
+            if (royaltyActive[defaultRefer][i]) {
+                uint256 rootShare = 0;
+                
+                // Calculate root's share of this tier
+                if (royaltyUsers[i] > 0) {
+                    rootShare = tierAmount / royaltyUsers[i];
+                }
+                
+                // Credit root user immediately
+                if (rootShare > 0 && !royaltyTaken[curDay][defaultRefer]) {
+                    payable(userInfo[defaultRefer].account).transfer(rootShare);
+                    userInfo[defaultRefer].royaltyIncome += rootShare;
+                    userInfo[defaultRefer].totalIncome += rootShare;
+                    royaltyDist[curDay][i] += rootShare;
+                    incomeInfo[defaultRefer].push(Income(defaultRefer, 0, rootShare, block.timestamp, false));
+                    dayIncome[defaultRefer][getUserCurDay(defaultRefer)] += rootShare;
+                }
+            }
         }
+        
+        // Mark root as claimed for this day (to prevent double-claiming)
+        royaltyTaken[curDay][defaultRefer] = true;
     }
 
     function _checkRoyaltyQualification(uint256 _ref) private {
