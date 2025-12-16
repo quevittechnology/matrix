@@ -69,6 +69,7 @@ contract UniversalMatrix is
     // Royalty distribution percentages for 4 tiers
     uint256[4] public royaltyPercent; // [40, 30, 20, 10]
     uint256[4] public royaltyLevel;   // [10, 11, 12, 13]
+    uint256[4] public royaltyDirectRequired; // [10, 11, 12, 13] - Configurable direct referrals required per tier
 
     /*//////////////////////////////////////////////////////////////
                             USER DATA
@@ -150,6 +151,7 @@ contract UniversalMatrix is
     event LevelPricesUpdated(uint256[13] newPrices);
     event FeeReceiverUpdated(address indexed oldReceiver, address indexed newReceiver);
     event RoyaltyVaultUpdated(address indexed oldVault, address indexed newVault);
+    event RoyaltyDirectRequiredUpdated(uint256[4] newRequirements);
 
     /*//////////////////////////////////////////////////////////////
                         INITIALIZER
@@ -190,6 +192,7 @@ contract UniversalMatrix is
         // Royalty distribution: 40%, 30%, 20%, 10% for levels 10, 11, 12, 13
         royaltyPercent = [40, 30, 20, 10];
         royaltyLevel = [10, 11, 12, 13];
+        royaltyDirectRequired = [10, 11, 12, 13]; // Progressive direct referral requirements
         
         // Initialize sponsor commission settings
         sponsorCommissionPercent = 5; // Default 5%
@@ -481,7 +484,7 @@ contract UniversalMatrix is
             if (
                 userInfo[_ref].level > lastLevel[_ref] &&
                 userInfo[_ref].level == royaltyLevel[i] &&
-                userInfo[_ref].directTeam == DIRECT_REQUIRED &&
+                userInfo[_ref].directTeam >= royaltyDirectRequired[i] &&  // Use tier-specific requirement
                 hasRoyaltyCapacity &&
                 !royaltyActive[_ref][i]
             ) {
@@ -591,7 +594,7 @@ contract UniversalMatrix is
         return
             !royaltyTaken[getCurRoyaltyDay()][_user] &&
             userInfo[_user].level == royaltyLevel[_royaltyTier] &&
-            userInfo[_user].directTeam >= DIRECT_REQUIRED &&
+            userInfo[_user].directTeam >= royaltyDirectRequired[_royaltyTier] &&  // Use tier-specific requirement
             royaltyActive[_user][_royaltyTier];
     }
 
@@ -763,6 +766,15 @@ contract UniversalMatrix is
 
     function updateLevelPrices(uint256[13] memory _newPrices) external onlyOwner {
         levelPrice = _newPrices;
+    }
+
+    function setRoyaltyDirectRequired(uint256[4] memory _requirements) external onlyOwner {
+        // Validate requirements (must be at least 2, max 100)
+        for (uint256 i = 0; i < _requirements.length; i++) {
+            require(_requirements[i] >= 2 && _requirements[i] <= 100, "Invalid requirement");
+        }
+        royaltyDirectRequired = _requirements;
+        emit RoyaltyDirectRequiredUpdated(_requirements);
     }
 
     function emergencyWithdraw() external onlyOwner {
