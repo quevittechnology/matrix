@@ -343,13 +343,16 @@ describe("Admin Settings", function () {
             const paused = await matrix.paused();
             expect(paused).to.equal(false);
 
-            // Check constants
-            const maxLevel = await matrix.MAX_LEVEL();
-            const roiCap = await matrix.ROI_CAP_PERCENT();
-            const royaltyPercent = await matrix.ROYALTY_PERCENT();
+
+            // Check constants (now configurable)
+            const maxLevel = await matrix.maxLevel();
+            const roiCap = await matrix.roiCapPercent();
+            const directRequired = await matrix.directRequired();
+            const incomeLayers = await matrix.incomeLayers();
             expect(maxLevel).to.equal(13);
             expect(roiCap).to.equal(150);
-            expect(royaltyPercent).to.equal(5);
+            expect(directRequired).to.equal(2);
+            expect(incomeLayers).to.equal(13);
         });
     });
 

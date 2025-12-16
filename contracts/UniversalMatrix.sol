@@ -42,12 +42,13 @@ contract UniversalMatrix is
     /*//////////////////////////////////////////////////////////////
                             CONSTANTS
     //////////////////////////////////////////////////////////////*/
-    uint256 public constant MAX_LEVEL = 13;
-    uint256 public constant ROI_CAP_PERCENT = 150;
-    uint256 public constant INCOME_LAYERS = 13; // Income distribution limited to 13 layers
-    uint256 public constant DIRECT_REQUIRED = 2;
     uint256 public constant ROYALTY_DIST_TIME = 24 hours;
-    uint256 public constant ROYALTY_PERCENT = 5; // 5% of deposits go to royalty
+    
+    // Admin-configurable system parameters
+    uint256 public maxLevel; // Maximum upgrade level
+    uint256 public roiCapPercent; // ROI cap percentage (e.g., 150 = 150%)
+    uint256 public incomeLayers; // Income distribution depth (layers to search)
+    uint256 public directRequired; // Minimum direct referrals for qualification
     
     
     // Distribution percentages - Configurable by admin
@@ -195,6 +196,10 @@ contract UniversalMatrix is
     event BNBPriceUpdated(uint256 newPrice, uint256 timestamp);
     event RegistrationDistributionUpdated(uint256 sponsorPercent, uint256 royaltyPercent);
     event UpgradeDistributionUpdated(uint256 incomePercent, uint256 adminPercent, uint256 royaltyPercent);
+    event MaxLevelUpdated(uint256 newMaxLevel);
+    event RoiCapUpdated(uint256 newRoiCap);
+    event IncomeLayersUpdated(uint256 newLayers);
+    event DirectRequiredUpdated(uint256 newRequired);
 
     /*//////////////////////////////////////////////////////////////
                         INITIALIZER
@@ -236,6 +241,12 @@ contract UniversalMatrix is
         royaltyPercent = [40, 30, 20, 10];
         royaltyLevel = [10, 11, 12, 13];
         royaltyDirectRequired = [10, 11, 12, 13]; // Progressive direct referral requirements
+        
+        // Initialize system parameters
+        maxLevel = 13; // Maximum 13 levels
+        roiCapPercent = 150; // 150% ROI cap
+        incomeLayers = 13; // Search up to 13 layers for income
+        directRequired = 2; // Minimum 2 direct referrals
         
         // Initialize distribution percentages
         registrationSponsorPercent = 90; // 90% to sponsor (after royalty deduction)
@@ -344,7 +355,7 @@ contract UniversalMatrix is
         require(!paused, "Contract paused");
         User storage user = userInfo[_id];
         require(user.referrer != 0, "Register first");
-        require(user.level + _lvls <= MAX_LEVEL, "Maximum level reached");
+        require(user.level + _lvls <= maxLevel, "Maximum level reached");
         require(msg.sender == user.account, "Not authorized");
 
         uint256 initialLvl = user.level;
@@ -371,7 +382,7 @@ contract UniversalMatrix is
 
         // Check royalty qualification
         for (uint256 j = 0; j < royaltyLevel.length; j++) {
-            if (user.level == royaltyLevel[j] && user.directTeam >= DIRECT_REQUIRED) {
+            if (user.level == royaltyLevel[j] && user.directTeam >= directRequired) {
                 pendingRoyaltyUsers[j][royaltyUsersIndex[j]].push(user.id);
             }
         }
@@ -400,7 +411,7 @@ contract UniversalMatrix is
         bool paid = false;
 
         // Search up to 13 layers for income distribution
-        for (uint256 i = 0; i < INCOME_LAYERS; i++) {
+        for (uint256 i = 0; i < incomeLayers; i++) {
             if (upline == 0) {
                 // Reached end without finding qualified user, send to root
                 _payToRoot(_user, _level, i + 1);
@@ -411,8 +422,8 @@ contract UniversalMatrix is
             // Check if upline is qualified
             // Root user is always qualified (no requirements)
             bool isQualified = (upline == defaultRefer) || 
-                              (userInfo[upline].level > _level && 
-                               userInfo[upline].directTeam >= DIRECT_REQUIRED);
+                               (userInfo[upline].level > _level && 
+                               userInfo[upline].directTeam >= directRequired);
             
             if (isQualified) {
                 // ✅ Qualified (including root) - send income, NO lostIncome recorded
@@ -432,7 +443,7 @@ contract UniversalMatrix is
 
         // If no qualified upline found in 13 layers, send to root
         if (!paid) {
-            _payToRoot(_user, _level, INCOME_LAYERS);
+            _payToRoot(_user, _level, incomeLayers);
         }
     }
 
@@ -579,7 +590,7 @@ contract UniversalMatrix is
             // 150% ROI cap on royalty income only (root user unlimited)
             bool hasRoyaltyCapacity = (_ref == defaultRefer) || // Root unlimited
                 (userInfo[_ref].royaltyIncome < 
-                (userInfo[_ref].totalDeposit * ROI_CAP_PERCENT) / 100);
+                (userInfo[_ref].totalDeposit * roiCapPercent) / 100);
             
             if (
                 userInfo[_ref].level > lastLevel[_ref] &&
@@ -607,7 +618,7 @@ contract UniversalMatrix is
         require(isRoyaltyAvl(userId, _royaltyTier), "Not eligible");
 
         // 150% ROI cap on royalty income only (root user unlimited)
-        if (userId == defaultRefer || userInfo[userId].royaltyIncome < (userInfo[userId].totalDeposit * ROI_CAP_PERCENT) / 100) {
+        if (userId == defaultRefer || userInfo[userId].royaltyIncome < (userInfo[userId].totalDeposit * roiCapPercent) / 100) {
             uint256 toDist = royalty[getCurRoyaltyDay() - 1][_royaltyTier] /
                 royaltyUsers[_royaltyTier];
 
@@ -642,7 +653,7 @@ contract UniversalMatrix is
         if (
             userId != defaultRefer && // Root user never removed
             royaltyActive[userId][_royaltyTier] &&
-            userInfo[userId].royaltyIncome >= (userInfo[userId].totalDeposit * ROI_CAP_PERCENT) / 100
+            userInfo[userId].royaltyIncome >= (userInfo[userId].totalDeposit * roiCapPercent) / 100
         ) {
             if (royaltyUsers[_royaltyTier] > 0) royaltyUsers[_royaltyTier] -= 1;
             royaltyActive[userId][_royaltyTier] = false;
@@ -666,7 +677,7 @@ contract UniversalMatrix is
             // 150% ROI cap on royalty income only (root user unlimited)
             if (
                 userInfo[users[i]].level == royaltyLevel[_royaltyTier] &&
-                (users[i] == defaultRefer || userInfo[users[i]].royaltyIncome < (userInfo[users[i]].totalDeposit * ROI_CAP_PERCENT) / 100)
+                (users[i] == defaultRefer || userInfo[users[i]].royaltyIncome < (userInfo[users[i]].totalDeposit * roiCapPercent) / 100)
             ) {
                 royaltyActive[users[i]][_royaltyTier] = true;
                 royaltyUsers[_royaltyTier] += 1;
@@ -877,7 +888,7 @@ contract UniversalMatrix is
      * @return BNB amount required for the level
      */
     function getLevelPrice(uint256 _level) public view returns (uint256) {
-        require(_level < MAX_LEVEL, "Invalid level");
+        require(_level < maxLevel, "Invalid level");
         
         // If oracle disabled, use fixed BNB prices
         if (!useOracle) {
@@ -912,7 +923,7 @@ contract UniversalMatrix is
     }
 
     function setSponsorMinLevel(uint256 _level) external onlyOwner {
-        require(_level >= 1 && _level <= MAX_LEVEL, "Invalid level");
+        require(_level >= 1 && _level <= maxLevel, "Invalid level");
         sponsorMinLevel = _level;
     }
 
@@ -969,6 +980,30 @@ contract UniversalMatrix is
         upgradeAdminPercent = _adminPercent;
         upgradeRoyaltyPercent = _royaltyPercent;
         emit UpgradeDistributionUpdated(_incomePercent, _adminPercent, _royaltyPercent);
+    }
+
+    function setMaxLevel(uint256 _maxLevel) external onlyOwner {
+        require(_maxLevel >= 10 && _maxLevel <= 20, "Max level must be 10-20");
+        maxLevel = _maxLevel;
+        emit MaxLevelUpdated(_maxLevel);
+    }
+
+    function setRoiCap(uint256 _roiCapPercent) external onlyOwner {
+        require(_roiCapPercent >= 100 && _roiCapPercent <= 300, "ROI cap must be 100-300%");
+        roiCapPercent = _roiCapPercent;
+        emit RoiCapUpdated(_roiCapPercent);
+    }
+
+    function setIncomeLayers(uint256 _layers) external onlyOwner {
+        require(_layers >= 5 && _layers <= 20, "Income layers must be 5-20");
+        incomeLayers = _layers;
+        emit IncomeLayersUpdated(_layers);
+    }
+
+    function setDirectRequired(uint256 _required) external onlyOwner {
+        require(_required >= 1 && _required <= 10, "Direct required must be 1-10");
+        directRequired = _required;
+        emit DirectRequiredUpdated(_required);
     }
 
     function setPriceFeed(address _priceFeed) external onlyOwner {
