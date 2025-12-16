@@ -49,12 +49,12 @@ contract UniversalMatrix is
     uint256 public constant ROYALTY_DIST_TIME = 24 hours;
     uint256 public constant ROYALTY_PERCENT = 5; // 5% of deposits go to royalty
     
-    // Fee distribution constants
-    uint256 private constant REGISTRATION_SPONSOR_PERCENT = 95; // 95% to sponsor on registration
-    uint256 private constant REGISTRATION_ADMIN_PERCENT = 5; // 5% admin fee on registration
-    uint256 private constant UPGRADE_INCOME_PERCENT = 90; // 90% to income distribution
-    uint256 private constant UPGRADE_ADMIN_PERCENT = 5; // 5% admin fee on upgrade
-    uint256 private constant UPGRADE_ROYALTY_PERCENT = 5; // 5% royalty on upgrade
+    
+    // Distribution percentages - Configurable by admin
+    uint256 public registrationSponsorPercent; // % to sponsor on registration
+    uint256 public upgradeIncomePercent; // % to income distribution on upgrade
+    uint256 public upgradeAdminPercent; // % admin fee on upgrade
+    uint256 public upgradeRoyaltyPercent; // % royalty on upgrade
     
     // Sponsor commission: Direct sponsor earns % from downline upgrades
     uint256 public sponsorCommissionPercent; // Configurable by admin
@@ -193,6 +193,8 @@ contract UniversalMatrix is
     event UseOracleUpdated(bool enabled);
     event LevelPricesUSDUpdated(uint256[13] newPricesUSD);
     event BNBPriceUpdated(uint256 newPrice, uint256 timestamp);
+    event RegistrationDistributionUpdated(uint256 sponsorPercent, uint256 royaltyPercent);
+    event UpgradeDistributionUpdated(uint256 incomePercent, uint256 adminPercent, uint256 royaltyPercent);
 
     /*//////////////////////////////////////////////////////////////
                         INITIALIZER
@@ -235,11 +237,17 @@ contract UniversalMatrix is
         royaltyLevel = [10, 11, 12, 13];
         royaltyDirectRequired = [10, 11, 12, 13]; // Progressive direct referral requirements
         
+        // Initialize distribution percentages
+        registrationSponsorPercent = 90; // 90% to sponsor (after royalty deduction)
+        registrationRoyaltyPercent = 5; // 5% royalty on registration
+        upgradeIncomePercent = 90; // 90% to income distribution
+        upgradeAdminPercent = 5; // 5% admin fee on upgrade
+        upgradeRoyaltyPercent = 5; // 5% royalty on upgrade
+        
         // Initialize sponsor commission settings
         sponsorCommissionPercent = 5; // Default 5%
         sponsorMinLevel = 4; // Default Level 4
         sponsorFallback = SponsorFallback.ROOT_USER; // Default fallback to root user
-        registrationRoyaltyPercent = 5; // Default 5% royalty on registration
         
         // Initialize price cache settings
         priceValidityPeriod = 7 days; // Price valid for 7 days
@@ -291,9 +299,9 @@ contract UniversalMatrix is
             userInfo[user.referrer].directTeam += 1;
             directTeam[user.referrer].push(user.id);
 
-            // Calculate amounts based on configurable royalty
+            // Calculate amounts based on configurable percentages
+            uint256 sponsorAmount = (price * registrationSponsorPercent) / 100;
             uint256 royaltyAmount = (price * registrationRoyaltyPercent) / 100;
-            uint256 sponsorAmount = price - royaltyAmount; // Sponsor gets remainder after royalty
             
             // Pay sponsor
             payable(userInfo[user.referrer].account).transfer(sponsorAmount);
@@ -371,7 +379,7 @@ contract UniversalMatrix is
         user.totalDeposit += totalAmount;
 
         // Distribute royalty
-        uint256 royaltyAmt = (totalAmount * ROYALTY_PERCENT) / 100;
+        uint256 royaltyAmt = (totalAmount * upgradeRoyaltyPercent) / 100;
         _distributeRoyalty(royaltyAmt);
 
         // Send fees
@@ -792,6 +800,22 @@ contract UniversalMatrix is
         return (levelPrice, levelFeePercent);
     }
 
+    function getDistributionSettings() external view returns (
+        uint256 regSponsor,
+        uint256 regRoyalty,
+        uint256 upgIncome,
+        uint256 upgAdmin,
+        uint256 upgRoyalty
+    ) {
+        return (
+            registrationSponsorPercent,
+            registrationRoyaltyPercent,
+            upgradeIncomePercent,
+            upgradeAdminPercent,
+            upgradeRoyaltyPercent
+        );
+    }
+
     function getRecentActivities(uint256 _num) external view returns (Activity[] memory) {
         uint256 length = activity.length > _num ? _num : activity.length;
         Activity[] memory activities = new Activity[](length);
@@ -923,6 +947,28 @@ contract UniversalMatrix is
         require(_percent <= 100, "Invalid percentage");
         registrationRoyaltyPercent = _percent;
         emit RegistrationRoyaltyUpdated(_percent);
+    }
+
+    function setRegistrationDistribution(
+        uint256 _sponsorPercent,
+        uint256 _royaltyPercent
+    ) external onlyOwner {
+        require(_sponsorPercent + _royaltyPercent <= 100, "Total exceeds 100%");
+        registrationSponsorPercent = _sponsorPercent;
+        registrationRoyaltyPercent = _royaltyPercent;
+        emit RegistrationDistributionUpdated(_sponsorPercent, _royaltyPercent);
+    }
+
+    function setUpgradeDistribution(
+        uint256 _incomePercent,
+        uint256 _adminPercent,
+        uint256 _royaltyPercent
+    ) external onlyOwner {
+        require(_incomePercent + _adminPercent + _royaltyPercent == 100, "Must equal 100%");
+        upgradeIncomePercent = _incomePercent;
+        upgradeAdminPercent = _adminPercent;
+        upgradeRoyaltyPercent = _royaltyPercent;
+        emit UpgradeDistributionUpdated(_incomePercent, _adminPercent, _royaltyPercent);
     }
 
     function setPriceFeed(address _priceFeed) external onlyOwner {

@@ -135,8 +135,8 @@ describe("UniversalMatrix", function () {
             await matrix.connect(user2).register(user1Id, user1Id, user2.address, { value: cost });
             const balanceAfter = await ethers.provider.getBalance(user1.address);
 
-            // Sponsor receives 95% of level price (5% goes to admin)
-            const expectedCommission = (levelPrices[0] * 95n) / 100n;
+            // Sponsor receives 90% of level price (5% royalty, 5% admin)
+            const expectedCommission = (levelPrices[0] * 90n) / 100n;
             expect(balanceAfter - balanceBefore).to.equal(expectedCommission);
 
             const user1Info = await matrix.userInfo(user1Id);
