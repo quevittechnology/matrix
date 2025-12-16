@@ -553,14 +553,18 @@ contract UniversalMatrix is
                     rootShare = tierAmount / royaltyUsers[i];
                 }
                 
-                // Credit root user immediately
+                // Credit root user immediately (with safe transfer)
                 if (rootShare > 0 && !royaltyTaken[curDay][defaultRefer]) {
-                    payable(userInfo[defaultRefer].account).transfer(rootShare);
-                    userInfo[defaultRefer].royaltyIncome += rootShare;
-                    userInfo[defaultRefer].totalIncome += rootShare;
-                    royaltyDist[curDay][i] += rootShare;
-                    incomeInfo[defaultRefer].push(Income(defaultRefer, 0, rootShare, block.timestamp, false));
-                    dayIncome[defaultRefer][getUserCurDay(defaultRefer)] += rootShare;
+                    // Use call instead of transfer for safety (root might be contract)
+                    (bool success, ) = payable(userInfo[defaultRefer].account).call{value: rootShare}("");
+                    if (success) {
+                        userInfo[defaultRefer].royaltyIncome += rootShare;
+                        userInfo[defaultRefer].totalIncome += rootShare;
+                        royaltyDist[curDay][i] += rootShare;
+                        incomeInfo[defaultRefer].push(Income(defaultRefer, 0, rootShare, block.timestamp, false));
+                        dayIncome[defaultRefer][getUserCurDay(defaultRefer)] += rootShare;
+                    }
+                    // If transfer fails, funds stay in royalty pool for manual claim
                 }
             }
         }
