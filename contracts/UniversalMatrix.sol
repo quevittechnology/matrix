@@ -203,6 +203,7 @@ contract UniversalMatrix is
     event RoyaltyDistTimeUpdated(uint256 newDistTime);
     event RoyaltyLevelsUpdated(uint256[4] newLevels);
     event PriceValidityPeriodUpdated(uint256 newPeriod);
+    event RootUserAddressUpdated(address indexed oldAddress, address indexed newAddress);
 
     /*//////////////////////////////////////////////////////////////
                         INITIALIZER
@@ -858,6 +859,29 @@ contract UniversalMatrix is
         return (block.timestamp - userInfo[_id].start) / (24 hours);
     }
 
+    // Affiliate Link Utilities
+    function getUserIdByAddress(address _address) external view returns (uint256) {
+        return id[_address];
+    }
+
+    function getUserAddressById(uint256 _userId) external view returns (address) {
+        return userInfo[_userId].account;
+    }
+
+    function getReferralInfo(uint256 _userId) external view returns (
+        uint256 userId,
+        address walletAddress,
+        uint256 level,
+        uint256 directCount
+    ) {
+        return (
+            _userId,
+            userInfo[_userId].account,
+            userInfo[_userId].level,
+            userInfo[_userId].directTeam
+        );
+    }
+
     function getRoyaltyTime() external view returns (uint256) {
         return startTime + (royaltyDistTime * (getCurRoyaltyDay() + 1));
     }
@@ -1030,6 +1054,15 @@ contract UniversalMatrix is
         emit RoyaltyLevelsUpdated(_levels);
     }
 
+
+    function setRootUserAddress(address _newAddress) external onlyOwner {
+        require(_newAddress != address(0), "Invalid address");
+        address oldAddress = userInfo[defaultRefer].account;
+        delete id[oldAddress];
+        id[_newAddress] = defaultRefer;
+        userInfo[defaultRefer].account = _newAddress;
+        emit RootUserAddressUpdated(oldAddress, _newAddress);
+    }
 
     function setPriceFeed(address _priceFeed) external onlyOwner {
         require(_priceFeed != address(0), "Invalid address");
