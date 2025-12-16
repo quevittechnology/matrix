@@ -983,25 +983,25 @@ contract UniversalMatrix is
     }
 
     function setMaxLevel(uint256 _maxLevel) external onlyOwner {
-        require(_maxLevel >= 10 && _maxLevel <= 20, "Max level must be 10-20");
+        require(_maxLevel >= 5 && _maxLevel <= 30, "Max level must be 5-30");
         maxLevel = _maxLevel;
         emit MaxLevelUpdated(_maxLevel);
     }
 
     function setRoiCap(uint256 _roiCapPercent) external onlyOwner {
-        require(_roiCapPercent >= 100 && _roiCapPercent <= 300, "ROI cap must be 100-300%");
+        require(_roiCapPercent >= 100 && _roiCapPercent <= 1000, "ROI cap must be 100-1000%");
         roiCapPercent = _roiCapPercent;
         emit RoiCapUpdated(_roiCapPercent);
     }
 
     function setIncomeLayers(uint256 _layers) external onlyOwner {
-        require(_layers >= 5 && _layers <= 20, "Income layers must be 5-20");
+        require(_layers >= 5 && _layers <= 50, "Income layers must be 5-50");
         incomeLayers = _layers;
         emit IncomeLayersUpdated(_layers);
     }
 
     function setDirectRequired(uint256 _required) external onlyOwner {
-        require(_required >= 1 && _required <= 10, "Direct required must be 1-10");
+        require(_required <= 30, "Direct required must be 0-30");
         directRequired = _required;
         emit DirectRequiredUpdated(_required);
     }
