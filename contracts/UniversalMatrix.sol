@@ -35,6 +35,13 @@ contract UniversalMatrix is
     uint256 public constant ROYALTY_DIST_TIME = 24 hours;
     uint256 public constant ROYALTY_PERCENT = 5; // 5% of deposits go to royalty
     
+    // Fee distribution constants
+    uint256 private constant REGISTRATION_SPONSOR_PERCENT = 95; // 95% to sponsor on registration
+    uint256 private constant REGISTRATION_ADMIN_PERCENT = 5; // 5% admin fee on registration
+    uint256 private constant UPGRADE_INCOME_PERCENT = 90; // 90% to income distribution
+    uint256 private constant UPGRADE_ADMIN_PERCENT = 5; // 5% admin fee on upgrade
+    uint256 private constant UPGRADE_ROYALTY_PERCENT = 5; // 5% royalty on upgrade
+    
     // Sponsor commission: Direct sponsor earns % from downline upgrades
     uint256 public sponsorCommissionPercent; // Configurable by admin
     uint256 public sponsorMinLevel; // Minimum level to receive commission
@@ -135,6 +142,14 @@ contract UniversalMatrix is
     event RoyaltyClaimed(address indexed user, uint256 amount, uint256 tier);
     event Paused(bool status);
     event MatrixPlaced(uint256 indexed userId, uint256 indexed uplineId);
+    
+    // Admin setting change events
+    event SponsorCommissionUpdated(uint256 newPercent);
+    event SponsorMinLevelUpdated(uint256 newLevel);
+    event SponsorFallbackUpdated(SponsorFallback newFallback);
+    event LevelPricesUpdated(uint256[13] newPrices);
+    event FeeReceiverUpdated(address indexed oldReceiver, address indexed newReceiver);
+    event RoyaltyVaultUpdated(address indexed oldVault, address indexed newVault);
 
     /*//////////////////////////////////////////////////////////////
                         INITIALIZER
@@ -149,13 +164,18 @@ contract UniversalMatrix is
         address _royaltyVault,
         address _owner
     ) external initializer {
+        // FIX M-2: Zero address validation
+        require(_feeReceiver != address(0), "Invalid fee receiver");
+        require(_royaltyVault != address(0), "Invalid royalty vault");
+        require(_owner != address(0), "Invalid owner");
+        
         __Ownable_init(_owner);
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
         feeReceiver = _feeReceiver;
         royaltyVault = IRoyaltyVault(_royaltyVault);
-        defaultRefer = 17534;
+        defaultRefer = 17534; // Root user ID (base for user ID generation)
         startTime = block.timestamp;
 
         // Initialize level prices (to be set by admin via updateLevelPrices)
@@ -205,7 +225,7 @@ contract UniversalMatrix is
             userInfo[user.referrer].directTeam += 1;
             directTeam[user.referrer].push(user.id);
 
-            uint256 sponsorAmount = (levelPrice[0] * 95) / 100; // 95% to sponsor
+            uint256 sponsorAmount = (levelPrice[0] * REGISTRATION_SPONSOR_PERCENT) / 100;
             payable(userInfo[user.referrer].account).transfer(sponsorAmount);
             incomeInfo[user.referrer].push(
                 Income(user.id, 1, sponsorAmount, block.timestamp, false)
@@ -299,46 +319,38 @@ contract UniversalMatrix is
 
         // Search up to 13 layers for income distribution
         for (uint256 i = 0; i < INCOME_LAYERS; i++) {
-            if (i < _level - 1) {
-                upline = userInfo[upline].upline;
-            } else {
-                if (upline == 0) {
-                    // Reached end without finding qualified user, send to root
-                    _payToRoot(_user, _level, i + 1);
-                    paid = true;
-                    break;
-                }
-                
-                if (upline == defaultRefer) {
-                    // Reached root user, always pay
-                    _payIncome(upline, _user, _level, i + 1, false);
-                    paid = true;
-                    break;
-                }
-
-                if (i < _level) {
-                    upline = userInfo[upline].upline;
-                } else {
-                    // Check if upline is qualified
-                    bool isQualified = userInfo[upline].level > _level && 
-                                      userInfo[upline].directTeam >= DIRECT_REQUIRED;
-                    
-                    if (isQualified) {
-                        // Qualified - send income
-                        _payIncome(upline, _user, _level, i + 1, false);
-                        paid = true;
-                        break;
-                    } else {
-                        // Not qualified - track as lost and continue searching
-                        lostIncome[upline] += levelPrice[_level];
-                        incomeInfo[upline].push(
-                            Income(_user, i + 1, levelPrice[_level], block.timestamp, true)
-                        );
-                    }
-
-                    upline = userInfo[upline].upline;
-                }
+            if (upline == 0) {
+                // Reached end without finding qualified user, send to root
+                _payToRoot(_user, _level, i + 1);
+                paid = true;
+                break;
             }
+            
+            if (upline == defaultRefer) {
+                // Reached root user, always pay
+                _payIncome(upline, _user, _level, i + 1, false);
+                paid = true;
+                break;
+            }
+
+            // Check if upline is qualified
+            bool isQualified = userInfo[upline].level > _level && 
+                              userInfo[upline].directTeam >= DIRECT_REQUIRED;
+            
+            if (isQualified) {
+                // Qualified - send income
+                _payIncome(upline, _user, _level, i + 1, false);
+                paid = true;
+                break;
+            } else {
+                // Not qualified - track as lost and continue searching
+                lostIncome[upline] += levelPrice[_level];
+                incomeInfo[upline].push(
+                    Income(_user, i + 1, levelPrice[_level], block.timestamp, true)
+                );
+            }
+
+            upline = userInfo[upline].upline;
         }
 
         // If no qualified upline found in 13 layers, send to root

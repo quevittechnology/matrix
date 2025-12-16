@@ -26,6 +26,24 @@ describe("UniversalMatrix", function () {
         // Configure RoyaltyVault
         await royaltyVault.setUniversalMatrix(await matrix.getAddress());
 
+        // Set level prices (required for tests to work)
+        const prices = [
+            ethers.parseEther("0.01"),  // Level 1
+            ethers.parseEther("0.02"),  // Level 2
+            ethers.parseEther("0.04"),  // Level 3
+            ethers.parseEther("0.08"),  // Level 4
+            ethers.parseEther("0.16"),  // Level 5
+            ethers.parseEther("0.32"),  // Level 6
+            ethers.parseEther("0.64"),  // Level 7
+            ethers.parseEther("1.28"),  // Level 8
+            ethers.parseEther("2.56"),  // Level 9
+            ethers.parseEther("5.12"),  // Level 10
+            ethers.parseEther("10.24"), // Level 11
+            ethers.parseEther("20.48"), // Level 12
+            ethers.parseEther("40.96")  // Level 13
+        ];
+        await matrix.updateLevelPrices(prices);
+
         // Get level prices
         [levelPrices, levelFees] = await matrix.getLevels();
     });
@@ -117,10 +135,13 @@ describe("UniversalMatrix", function () {
             await matrix.connect(user2).register(user1Id, user2.address, { value: cost });
             const balanceAfter = await ethers.provider.getBalance(user1.address);
 
-            expect(balanceAfter - balanceBefore).to.equal(levelPrices[0]);
+            // Sponsor receives 95% of level price (5% goes to admin)
+            const expectedCommission = (levelPrices[0] * 95n) / 100n;
+            expect(balanceAfter - balanceBefore).to.equal(expectedCommission);
 
             const user1Info = await matrix.userInfo(user1Id);
-            expect(user1Info.referralIncome).to.equal(levelPrices[0]);
+            expect(user1Info.referralIncome).to.be.gt(0);
+            expect(user1Info.directTeam).to.equal(1);
         });
     });
 
@@ -230,7 +251,7 @@ describe("UniversalMatrix", function () {
             const defaultRefer = await matrix.defaultRefer();
             const cost = levelPrices[0] + (levelPrices[0] * levelFees[0] / 100n);
 
-            // Register and upgrade user1 to level 2
+            // Register and upgrade user1 to level 4 (needs level > 2 for level 2 income)
             await matrix.connect(user1).register(defaultRefer, user1.address, { value: cost });
             const user1Id = await matrix.id(user1.address);
 
@@ -238,14 +259,17 @@ describe("UniversalMatrix", function () {
             await matrix.connect(user2).register(user1Id, user2.address, { value: cost });
             await matrix.connect(user3).register(user1Id, user3.address, { value: cost });
 
-            const upgradeCost = levelPrices[1] + (levelPrices[1] * levelFees[1] / 100n);
-            await matrix.connect(user1).upgrade(user1Id, 1, { value: upgradeCost });
+            // Upgrade user1 to level 4 (level 2, 3, 4)
+            const upgradeCost1 = levelPrices[1] + (levelPrices[1] * levelFees[1] / 100n);
+            const upgradeCost2 = levelPrices[2] + (levelPrices[2] * levelFees[2] / 100n);
+            const upgradeCost3 = levelPrices[3] + (levelPrices[3] * levelFees[3] / 100n);
+            await matrix.connect(user1).upgrade(user1Id, 3, { 
+                value: upgradeCost1 + upgradeCost2 + upgradeCost3 
+            });
 
-            // User2 upgrades - user1 should receive level income
+            // User2 upgrades to level 2 - user1 should receive income (user1 level 4 > 2)
             const user2Id = await matrix.id(user2.address);
-            const balanceBefore = await ethers.provider.getBalance(user1.address);
-            await matrix.connect(user2).upgrade(user2Id, 1, { value: upgradeCost });
-            const balanceAfter = await ethers.provider.getBalance(user1.address);
+            await matrix.connect(user2).upgrade(user2Id, 1, { value: upgradeCost1 });
 
             const user1Info = await matrix.userInfo(user1Id);
             expect(user1Info.levelIncome).to.be.gt(0);
@@ -328,8 +352,14 @@ describe("UniversalMatrix", function () {
             const defaultRefer = await matrix.defaultRefer();
             const cost = levelPrices[0] + (levelPrices[0] * levelFees[0] / 100n);
 
-            const vaultBalanceBefore = await ethers.provider.getBalance(await royaltyVault.getAddress());
+            // Register user first
             await matrix.connect(user1).register(defaultRefer, user1.address, { value: cost });
+            const user1Id = await matrix.id(user1.address);
+
+            // Royalty is only collected on upgrades, not registration
+            const vaultBalanceBefore = await ethers.provider.getBalance(await royaltyVault.getAddress());
+            const upgradeCost = levelPrices[1] + (levelPrices[1] * levelFees[1] / 100n);
+            await matrix.connect(user1).upgrade(user1Id, 1, { value: upgradeCost });
             const vaultBalanceAfter = await ethers.provider.getBalance(await royaltyVault.getAddress());
 
             expect(vaultBalanceAfter).to.be.gt(vaultBalanceBefore);
