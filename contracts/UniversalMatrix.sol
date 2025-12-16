@@ -72,6 +72,11 @@ contract UniversalMatrix is
     bool public useOracle; // Toggle oracle on/off
     uint256[13] public levelPriceUSD; // Target USD price per level (in cents, e.g., 1000 = $10)
     
+    // Cached price (updated manually, e.g., every Sunday)
+    uint256 public cachedBNBPrice; // Cached BNB/USD price (8 decimals)
+    uint256 public lastPriceUpdate; // Timestamp of last price update
+    uint256 public priceValidityPeriod; // How long cached price is valid (e.g., 7 days)
+    
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -187,6 +192,7 @@ contract UniversalMatrix is
     event PriceFeedUpdated(address indexed newPriceFeed);
     event UseOracleUpdated(bool enabled);
     event LevelPricesUSDUpdated(uint256[13] newPricesUSD);
+    event BNBPriceUpdated(uint256 newPrice, uint256 timestamp);
 
     /*//////////////////////////////////////////////////////////////
                         INITIALIZER
@@ -234,6 +240,11 @@ contract UniversalMatrix is
         sponsorMinLevel = 4; // Default Level 4
         sponsorFallback = SponsorFallback.ROOT_USER; // Default fallback to root user
         registrationRoyaltyPercent = 5; // Default 5% royalty on registration
+        
+        // Initialize price cache settings
+        priceValidityPeriod = 7 days; // Price valid for 7 days
+        cachedBNBPrice = 0; // No cached price initially (use fixed prices)
+        lastPriceUpdate = 0;
         
         // Initialize root matrix node
         matrix[defaultRefer] = MatrixNode({
@@ -793,30 +804,22 @@ contract UniversalMatrix is
                         PRICE ORACLE FUNCTIONS
     //////////////////////////////////////////////////////////////*/
     /**
-     * @dev Get current BNB/USD price from Chainlink oracle
+     * @dev Get current BNB/USD price (uses cached price to save gas)
      * @return price BNB price in USD with 8 decimals (e.g., 60000000000 = $600)
      */
     function getBNBPrice() public view returns (uint256) {
-        if (!useOracle || address(priceFeed) == address(0)) {
-            return 0;
+        if (!useOracle) {
+            return 0; // Oracle disabled
         }
         
-        try priceFeed.latestRoundData() returns (
-            uint80,
-            int256 answer,
-            uint256,
-            uint256 updatedAt,
-            uint80
-        ) {
-            require(answer > 0, "Invalid price");
-            
-            // Check if price is stale (older than 24 hours)
-            require(block.timestamp - updatedAt <= 24 hours, "Price data is stale");
-            
-            return uint256(answer);
-        } catch {
-            return 0;
+        // Check if cached price is still valid (updated within 7 days)
+        if (cachedBNBPrice > 0 && block.timestamp - lastPriceUpdate <= priceValidityPeriod) {
+            return cachedBNBPrice; // ✅ Use cached price (no oracle call!)
         }
+        
+        // Cached price expired or not set - return 0 to use fixed prices
+        // Admin must call updateBNBPrice() to refresh cache
+        return 0;
     }
 
     /**
@@ -915,6 +918,80 @@ contract UniversalMatrix is
         }
         levelPriceUSD = _pricesUSD;
         emit LevelPricesUSDUpdated(_pricesUSD);
+    }
+
+    /**
+     * @dev Update BNB price from Chainlink oracle
+     * @notice Anyone can call this after validity period expires (default: 7 days)
+     * @notice This enables automatic price refresh - users update it themselves!
+     */
+    function updateBNBPrice() external {
+        require(useOracle, "Oracle not enabled");
+        require(address(priceFeed) != address(0), "Price feed not set");
+        
+        // Only allow update after validity period expires (or first time)
+        require(
+            lastPriceUpdate == 0 || block.timestamp - lastPriceUpdate >= priceValidityPeriod,
+            "Price is still valid - wait for expiry"
+        );
+        
+        // Fetch fresh price from Chainlink
+        try priceFeed.latestRoundData() returns (
+            uint80,
+            int256 answer,
+            uint256,
+            uint256 updatedAt,
+            uint80
+        ) {
+            require(answer > 0, "Invalid price from oracle");
+            require(block.timestamp - updatedAt <= 24 hours, "Oracle price is stale");
+            
+            // Update cache
+            cachedBNBPrice = uint256(answer);
+            lastPriceUpdate = block.timestamp;
+            
+            emit BNBPriceUpdated(cachedBNBPrice, block.timestamp);
+        } catch {
+            revert("Failed to fetch price from oracle");
+        }
+    }
+
+    /**
+     * @dev Set how long cached price remains valid
+     * @param _period Validity period in seconds (default: 7 days)
+     */
+    function setPriceValidityPeriod(uint256 _period) external onlyOwner {
+        require(_period >= 1 days && _period <= 30 days, "Period must be 1-30 days");
+        priceValidityPeriod = _period;
+    }
+
+    /**
+     * @dev Force update BNB price immediately (admin only, bypasses validity period)
+     * @notice Use this to manually set price outside the 7-day schedule
+     */
+    function forceUpdateBNBPrice() external onlyOwner {
+        require(useOracle, "Oracle not enabled");
+        require(address(priceFeed) != address(0), "Price feed not set");
+        
+        // Fetch fresh price from Chainlink (no time restriction)
+        try priceFeed.latestRoundData() returns (
+            uint80,
+            int256 answer,
+            uint256,
+            uint256 updatedAt,
+            uint80
+        ) {
+            require(answer > 0, "Invalid price from oracle");
+            require(block.timestamp - updatedAt <= 24 hours, "Oracle price is stale");
+            
+            // Update cache
+            cachedBNBPrice = uint256(answer);
+            lastPriceUpdate = block.timestamp;
+            
+            emit BNBPriceUpdated(cachedBNBPrice, block.timestamp);
+        } catch {
+            revert("Failed to fetch price from oracle");
+        }
     }
 
     function emergencyWithdraw() external onlyOwner {
