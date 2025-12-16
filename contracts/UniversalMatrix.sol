@@ -175,7 +175,7 @@ contract UniversalMatrix is
 
         feeReceiver = _feeReceiver;
         royaltyVault = IRoyaltyVault(_royaltyVault);
-        defaultRefer = 17534; // Root user ID (base for user ID generation)
+        defaultRefer = 73928; // Root user ID (base for user ID generation)
         startTime = block.timestamp;
 
         // Initialize level prices (to be set by admin via updateLevelPrices)

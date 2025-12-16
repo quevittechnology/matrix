@@ -51,7 +51,7 @@ async function displayContractInfo(matrix) {
 async function registerUser(matrix, signer) {
     console.log("📝 Registering new user...");
 
-    const referrerId = 17534; // Default referrer or specify another
+    const referrerId = 73928; // Default referrer or specify another
     const newUserAddress = signer.address;
 
     const [prices, fees] = await matrix.getLevels();

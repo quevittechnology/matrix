@@ -102,7 +102,7 @@ async function main() {
         configuration: {
             feeReceiver: config.feeReceiver,
             owner: config.owner,
-            defaultRefer: "17534",
+            defaultRefer: "73928",
             sponsorCommissionPercent: "5",
             sponsorMinLevel: "4",
             levelPrices: prices.map(p => ethers.formatEther(p))
