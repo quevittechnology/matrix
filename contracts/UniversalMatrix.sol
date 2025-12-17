@@ -476,8 +476,10 @@ contract UniversalMatrix is
         dayIncome[_recipient][getUserCurDay(_recipient)] += incomeAmount;
         
         // Pay sponsor commission (upgradeSponsorPercent% of level income to direct sponsor)
-        // Sponsor must be Level 4+ to receive commission (Root user always qualifies)
-        if (userInfo[_recipient].referrer != 0 && userInfo[_recipient].referrer != defaultRefer) {
+        // Only pay if within layer limit AND sponsor is Level 4+ (Root user always qualifies)
+        if (_layer <= incomeLayers && 
+            userInfo[_recipient].referrer != 0 && 
+            userInfo[_recipient].referrer != defaultRefer) {
             uint256 sponsor = userInfo[_recipient].referrer;
             uint256 sponsorCommission = (incomeAmount * upgradeSponsorPercent) / 100;
             
