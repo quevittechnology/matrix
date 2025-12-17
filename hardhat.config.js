@@ -7,16 +7,17 @@ module.exports = {
   solidity: {
     version: "0.8.22",
     settings: {
+      viaIR: true, // Enable via-IR optimizer for better size reduction
       optimizer: {
         enabled: true,
-        runs: 10, // Minimum runs for absolute smallest contract size
+        runs: 10, // Minimum runs for smallest contract size
       },
     },
   },
   networks: {
     hardhat: {
       chainId: 1337,
-      allowUnlimitedContractSize: true, // For opBNB deployment (no 24KB limit)
+      allowUnlimitedContractSize: true, // For testing only (actual networks have 24KB limit)
     },
     localhost: {
       url: "http://127.0.0.1:8545",
