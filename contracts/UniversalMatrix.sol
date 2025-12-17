@@ -1041,7 +1041,7 @@ contract UniversalMatrix is
     }
 
     function getCurRoyaltyDay() public view returns (uint256) {
-        return block.timestamp / royaltyDistTime;
+        return (block.timestamp - startTime) / royaltyDistTime;
     }
     
     /*//////////////////////////////////////////////////////////////
