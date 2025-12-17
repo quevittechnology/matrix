@@ -75,14 +75,45 @@ OWNER=0xYourGnosisSafeMultisigAddress
 
 ## 📊 Control Matrix
 
+### Current Contract (All Same Level)
+All admin functions use `onlyOwner` modifier:
+
 | Function | Single Owner | Multisig Owner |
 |----------|-------------|----------------|
-| **System Parameters** | ✅ Direct | 🔐 Multisig Vote |
 | **Root User Address** | ✅ Direct | 🔐 Multisig Vote |
 | **Emergency Withdraw** | ✅ Direct | 🔐 Multisig Vote |
 | **Fee Receiver** | ✅ Direct | 🔐 Multisig Vote |
+| **System Parameters** | ✅ Direct | 🔐 Multisig Vote |
 
-**Key Point:** The level of control depends on WHO you set as owner during deployment!
+**Current Limitation:** All functions have same access control.
+
+---
+
+### Desired Hybrid Model (Requires Contract Modification)
+
+| Function | Control Level |
+|----------|---------------|
+| **Root User Address** | 🔐 Multisig ONLY |
+| **Emergency Withdraw** | 🔐 Multisig ONLY |
+| **Fee Receiver** | 🔐 Multisig ONLY |
+| **System Parameters** | ✅ Single Owner |
+
+**To achieve this, would need:**
+1. Two different modifiers: `onlyOwner` and `onlyMultisig`
+2. Two different addresses: `owner` (single) and `multisig` (DAO)
+3. Contract modification to use different modifiers per function
+
+---
+
+### Workaround: Use Multisig with Timelocks
+
+**Best current solution without contract changes:**
+
+1. **Deploy with Gnosis Safe as owner** (all functions multisig-controlled)
+2. **For system parameters:** Use shorter timelock (e.g., 24h)
+3. **For critical functions:** Use longer timelock (e.g., 7 days)
+
+This gives community review time proportional to risk level.
 
 ---
 
