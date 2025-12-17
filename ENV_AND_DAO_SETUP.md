@@ -42,74 +42,86 @@ npx hardhat run scripts/deploy.js --network opBNBTestnet
 
 The contract sets these defaults automatically on deployment:
 
-| Parameter | Default Value | Changeable via DAO |
+**✅ FIXED AFTER DEPLOYMENT (Not DAO Changeable)**
+
+| Parameter | Default Value | Set in Constructor |
 |-----------|--------------|-------------------|
-| Max Level | 13 | ✅ setMaxLevel() |
-| ROI Cap | 150% | ✅ setRoiCap() (max 300%) |
-| Income Layers | 13 | ✅ setIncomeLayers() (max 30) |
-| Direct Required | 2 | ✅ setDirectRequired() |
-| Royalty Dist Time | 24 hours | ✅ setRoyaltyDistTime() |
-| Sponsor Min Level | 4 | ✅ setSponsorMinLevel() |
-| Perpetual Royalty Min Refs | 15 | ✅ setPerpetualRoyaltyMinReferrals() |
-| Registration Sponsor % | 90% | ✅ setRegistrationDistribution() |
-| Registration Royalty % | 5% | ✅ setRegistrationDistribution() |
-| Upgrade Income % | 85% | ✅ setUpgradeDistribution() |
-| Upgrade Sponsor % | 5% | ✅ setUpgradeDistribution() |
-| Upgrade Admin % | 5% | ✅ setUpgradeDistribution() |
-| Upgrade Royalty % | 5% | ✅ setUpgradeDistribution() |
+| Max Level | 13 | ✅ Fixed |
+| ROI Cap | 150% | ✅ Fixed |
+| Income Layers | 13 | ✅ Fixed |
+| Direct Required | 2 | ✅ Fixed |
+| Royalty Dist Time | 24 hours | ✅ Fixed |
+| Sponsor Min Level | 4 | ✅ Fixed |
+| Perpetual Royalty Min Refs | 15 | ✅ Fixed |
+| Registration Sponsor % | 90% | ✅ Fixed |
+| Registration Royalty % | 5% | ✅ Fixed |
+| Upgrade Income % | 85% | ✅ Fixed |
+| Upgrade Sponsor % | 5% | ✅ Fixed |
+| Upgrade Admin % | 5% | ✅ Fixed |
+| Upgrade Royalty % | 5% | ✅ Fixed |
+
+**🔐 DAO MULTISIG CONTROLLED (Critical Admin Functions Only)**
+
+| Function | Purpose | DAO Required |
+|----------|---------|--------------|
+| Root User Address | Change root wallet | ✅ setRootUserAddress() |
+| Emergency Withdraw | Drain contract | ✅ emergencyWithdraw() |
+| Fee Receiver | Change fee wallet | ✅ setFeeReceiver() |
+
+**Why This Design?**
+- ✅ **Stability** - Core economics can't be changed after launch
+- ✅ **Trust** - Users know exactly what they're getting into
+- ✅ **Security** - Only critical admin functions need DAO approval
+- ✅ **Simplicity** - DAO focuses on security, not economics
 
 ---
 
 ## 🔐 DAO Governance (Post-Deployment)
 
-### Step 1: Transfer Ownership to Multisig
+### DAO Controls Only Critical Admin Functions
 
-**If you deployed with EOA (single wallet):**
-```javascript
-// Connect to deployed contract
-const matrix = await ethers.getContractAt("UniversalMatrix", "CONTRACT_ADDRESS");
+The DAO multisig has control over **3 critical security/admin functions only**:
 
-// Transfer to Gnosis Safe multisig
-const MULTISIG_ADDRESS = "0xYourGnosisSafeAddress";
-await matrix.transferOwnership(MULTISIG_ADDRESS);
-```
-
-### Step 2: DAO Can Change Any Parameter
-
-All admin functions now require multisig approval (2-of-3 or 3-of-5 signatures):
-
-#### Change Root User Address
+#### 1. Change Root User Address
 ```javascript
 // Via Gnosis Safe
 // Function: setRootUserAddress(address _newAddress)
-// Requires: Multisig approval
+// Requires: Multisig approval (2-of-3 or 3-of-5)
 await matrix.setRootUserAddress("0xNewRootUserAddress");
 ```
 
-#### Adjust ROI Cap
+#### 2. Emergency Withdraw
 ```javascript
-// Function: setRoiCap(uint256 _roiCapPercent)
-// Range: 100% - 300%
-await matrix.setRoiCap(200); // Change to 200%
+// Function: emergencyWithdraw()
+// Drains all contract BNB to owner (multisig)
+// ONLY for genuine emergencies!
+await matrix.emergencyWithdraw();
 ```
 
-#### Modify Income Layers
+#### 3. Change Fee Receiver
 ```javascript
-// Function: setIncomeLayers(uint256 _layers)
-// Range: 5 - 30
-await matrix.setIncomeLayers(20); // Change to 20 layers
+// Function: setFeeReceiver(address _newReceiver)
+// Changes where admin fees are sent
+await matrix.setFeeReceiver("0xNewFeeReceiverAddress");
 ```
 
-#### Update Level Prices
-```javascript
-// Function: updateLevelPrices(uint256[13] memory _levelPrice)
-const newPrices = [
-    ethers.parseEther("0.02"), // Double all prices
-    ethers.parseEther("0.04"),
-    // ... all 13 levels
-];
-await matrix.updateLevelPrices(newPrices);
-```
+### ⚠️ System Parameters are FIXED
+
+**The following are SET ONCE at deployment and CANNOT be changed:**
+- ❌ Max Level (13)
+- ❌ ROI Cap (150%)
+- ❌ Income Layers (13)
+- ❌ Direct Required (2)
+- ❌ Royalty Dist Time (24 hours)
+- ❌ Sponsor Min Level (4)
+- ❌ Perpetual Royalty Min Refs (15)
+- ❌ All distribution percentages (90/5/5 splits)
+
+**Why Fixed?**
+- Users need to trust the economics won't change
+- Prevents DAO from altering game rules mid-play
+- Ensures fairness and transparency
+- Only security/admin functions are DAO-controlled
 
 ---
 
