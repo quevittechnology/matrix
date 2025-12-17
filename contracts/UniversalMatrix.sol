@@ -64,6 +64,9 @@ contract UniversalMatrix is
     uint256 public sponsorMinLevel; // Minimum level to receive commission
     uint256 public sponsorCommissionLayers; // Layer limit for sponsor commission (0 = unlimited)
     
+    // Perpetual royalty accumulation for active referrers
+    uint256 public perpetualRoyaltyMinReferrals; // Minimum referrals for perpetual accumulation (0 = disabled)
+    
     // Registration royalty: Configurable % of registration fee goes to royalty pool
     uint256 public registrationRoyaltyPercent; // Configurable by admin (default 5%)
     
@@ -174,6 +177,9 @@ contract UniversalMatrix is
     
     // Root user special royalty accumulation (never expires, never rolls over)
     mapping(uint256 => uint256) public rootUserPendingRoyalty; // tier => pending amount for root
+    
+    // User pending royalty (for active referrers with perpetualRoyaltyMinReferrals)
+    mapping(uint256 => mapping(uint256 => uint256)) public userPendingRoyalty; // user => tier => pending amount
 
     /*//////////////////////////////////////////////////////////////
                             EVENTS
@@ -183,6 +189,8 @@ contract UniversalMatrix is
     event RewardAdded(address indexed user, uint256 amount, string source);
     event RoyaltyClaimed(address indexed user, uint256 amount, uint256 tier);
     event RootRoyaltyClaimed(uint256 amount, uint256 tier);
+    event UserPendingRoyaltyAccumulated(uint256 indexed userId, uint256 tier, uint256 amount);
+    event PerpetualRoyaltyMinReferralsUpdated(uint256 newMinReferrals);
     event Paused(bool status);
     event MatrixPlaced(uint256 indexed userId, uint256 indexed uplineId);
     
@@ -272,6 +280,7 @@ contract UniversalMatrix is
         sponsorMinLevel = 4; // Default Level 4
         sponsorCommissionLayers = 0; // Default unlimited (0 = no layer limit)
         sponsorFallback = SponsorFallback.ROOT_USER; // Default fallback to root user
+        perpetualRoyaltyMinReferrals = 15; // Default: 15+ referrals for perpetual accumulation
         
         // Initialize price cache settings
         cachedBNBPrice = 0; // No cached price initially (use fixed prices)
@@ -654,7 +663,7 @@ contract UniversalMatrix is
                             sponsorIncome[sponsor] += sponsorCommission;
                             dayIncome[sponsor][getUserCurDay(sponsor)] += sponsorCommission;
                         }
-                    }
+                     }
                 }
                 payable(userInfo[userId].account).transfer(toDist);
                 userInfo[userId].royaltyIncome += toDist;
@@ -666,6 +675,19 @@ contract UniversalMatrix is
 
                 emit RoyaltyClaimed(msg.sender, toDist, _royaltyTier);
             }
+        }
+        
+        // ALSO claim any accumulated pending royalty (for active referrers)
+        uint256 pending = userPendingRoyalty[userId][_royaltyTier];
+        if (pending > 0) {
+            userPendingRoyalty[userId][_royaltyTier] = 0;
+            payable(msg.sender).transfer(pending);
+            userInfo[userId].royaltyIncome += pending;
+            userInfo[userId].totalIncome += pending;
+            incomeInfo[userId].push(Income(defaultRefer, 0, pending, block.timestamp, false));
+            dayIncome[userId][getUserCurDay(userId)] += pending;
+            
+            emit RoyaltyClaimed(msg.sender, pending, _royaltyTier);
         }
 
         // Remove from royalty pool if 150% cap reached (root user never removed)
@@ -906,6 +928,17 @@ contract UniversalMatrix is
         return pending;
     }
 
+    /**
+     * @dev Get user's pending royalty for all tiers (active referrers)
+     */
+    function getUserPendingRoyalty(uint256 _userId) external view returns (uint256[4] memory) {
+        uint256[4] memory pending;
+        for (uint256 i = 0; i < 4; i++) {
+            pending[i] = userPendingRoyalty[_userId][i];
+        }
+        return pending;
+    }
+
     // Affiliate Link Utilities
     function getUserIdByAddress(address _address) external view returns (uint256) {
         return id[_address];
@@ -1004,6 +1037,12 @@ contract UniversalMatrix is
         require(_layers <= 50, "Max 50 layers");
         sponsorCommissionLayers = _layers;
         emit SponsorCommissionLayersUpdated(_layers);
+    }
+
+    function setPerpetualRoyaltyMinReferrals(uint256 _minReferrals) external onlyOwner {
+        require(_minReferrals <= 100, "Max 100 referrals");
+        perpetualRoyaltyMinReferrals = _minReferrals;
+        emit PerpetualRoyaltyMinReferralsUpdated(_minReferrals);
     }
 
     function setSponsorMinLevel(uint256 _level) external onlyOwner {
