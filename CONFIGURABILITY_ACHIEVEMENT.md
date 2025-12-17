@@ -19,49 +19,48 @@ Your `UniversalMatrix` contract is now **FULLY CONFIGURABLE** with **ZERO hardco
 
 ---
 
-## 🔧 What's Configurable (All 29 Parameters)
+## 🎯 All Configurable Parameters (31 Total)
 
-### 1️⃣ System Parameters (6)
-✅ Max Level (5-30)  
-✅ ROI Cap (100-1000%)  
-✅ Income Layers (5-50)  
-✅ Direct Required (0-30)  
-✅ Royalty Distribution Time (1h-7d)  
-✅ Price Validity Period (1h-30d)
+### System Parameters (4)
+1. `maxLevel` - Maximum upgrade level (5-30, default: 13)
+2. `roiCapPercent` - ROI cap percentage (100-1000%, default: 150%)
+3. `incomeLayers` - Income distribution depth (5-50, default: 13)
+4. `directRequired` - Minimum direct referrals (2-100, default: 2)
 
-### 2️⃣ Distribution Percentages (6)
-✅ Registration Sponsor %  
-✅ Registration Royalty %  
-✅ Upgrade Income %  
-✅ Upgrade Sponsor %  
-✅ Upgrade Admin %  
-✅ Upgrade Royalty %
+### Distribution Percentages (6)
+5. `registrationSponsorPercent` - Registration sponsor % (0-100%, default: 90%)
+6. `registrationRoyaltyPercent` - Registration royalty % (0-100%, default: 5%)
+7. `upgradeIncomePercent` - Upgrade income % (must total 100%)
+8. `upgradeSponsorPercent` - Upgrade sponsor % (must total 100%, default: 5%)
+9. `upgradeAdminPercent` - Upgrade admin % (must total 100%, default: 5%)
+10. `upgradeRoyaltyPercent` - Upgrade royalty % (must total 100%, default: 5%)
 
-### 3️⃣ Sponsor Commission (2)
-✅ Sponsor Min Level  
-✅ Sponsor Fallback Destination
+### Sponsor Commission (3)
+11. `sponsorMinLevel` - Minimum level to receive (1-13, default: 4)
+12. `sponsorCommissionLayers` - Layer limit (0-50, **0 = unlimited**, default: 0)
+13. `sponsorFallback` - Unqualified sponsor destination (ROOT_USER/ADMIN/ROYALTY_POOL)
 
-### 4️⃣ Level Pricing (26 values)
-✅ Level Prices [13] (BNB amounts)  
-✅ Level Fees [13] (percentages)
+### Royalty System (12)
+14-17. `royaltyPercent[4]` - Tier percentages [40, 30, 20, 10] (must total 100%)
+18-21. `royaltyLevel[4]` - Qualification levels [10, 11, 12, 13]
+22-25. `royaltyDirectRequired[4]` - Direct requirements per tier [10, 11, 12, 13]
+26. `royaltyDistTime` - Distribution cycle (1-30 days, default: 24 hours)
 
-### 5️⃣ Royalty System (12 values)
-✅ Royalty Percentages [4]  
-✅ Royalty Levels [4]  
-✅ Royalty Direct Required [4]
+### Pricing (3)
+27. `levelPrice[13]` - Fixed BNB prices per level
+28. `levelPriceUSD[13]` - Target USD prices (if oracle enabled)
+29. `priceValidityPeriod` - Oracle cache validity (1-30 days, default: 7 days)
 
-### 6️⃣ Addresses (2)
-✅ Fee Receiver  
-✅ Royalty Vault
+### Addresses (3)
+30. `feeReceiver` - Admin fee destination
+31. `royaltyVault` - Royalty pool contract address
+32. `priceFeed` - Chainlink oracle address (optional)
 
-### 7️⃣ Price Oracle (5)
-✅ Use Oracle (on/off)  
-✅ Price Feed Address  
-✅ Level Prices USD [13]
+### Root User Features (1)
+33. `rootUserAddress` - Root user wallet (via setRootUserAddress)
+34. `rootUserPendingRoyalty[4]` - Perpetual accumulation (view only)
 
-### 8️⃣ Contract Control (1)
-✅ Paused Status
-
+**Total: 34 configurable parameters + features**
 ---
 
 ## 🔥 What Was Hardcoded (Now Fixed)

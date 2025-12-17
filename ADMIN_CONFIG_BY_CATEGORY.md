@@ -146,7 +146,18 @@ event SponsorMinLevelUpdated(uint256 newLevel);
 - **Validation:** `require(_level >= 1 && _level <= maxLevel)`
 - **Usage:** Sponsor must be this level to earn commission
 
-### 3.3 Fallback Destination
+### 3.3 Commission Layer Limit
+```solidity
+uint256 public sponsorCommissionLayers;
+function setSponsorCommissionLayers(uint256 _layers) external onlyOwner;
+event SponsorCommissionLayersUpdated(uint256 newLayers);
+```
+- **Default:** 0 (unlimited)
+- **Range:** 0-50 (0 = unlimited)
+- **Validation:** `require(_layers <= 50)`
+- **Usage:** Maximum depth for sponsor commission payment
+
+### 3.4 Fallback Destination
 ```solidity
 enum SponsorFallback { ROOT_USER, ADMIN, ROYALTY_POOL }
 SponsorFallback public sponsorFallback;

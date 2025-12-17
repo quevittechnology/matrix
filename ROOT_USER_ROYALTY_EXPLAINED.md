@@ -148,7 +148,62 @@ if (royaltyActive[defaultRefer][i]) {
     
     // Credit root user immediately (safe transfer)
     (bool success, ) = payable(userInfo[defaultRefer].account)
-        .call{value: rootShare}("");
+ ## Root User Special Privileges
+
+The **root user has 4 special privileges:**
+
+### 1. **Auto-Credited** ✅
+**Normal users:** Must manually call `claimRoyalty()` function  
+**Root user:** Automatically credited during every distribution cycle (every 24 hours)
+
+```solidity
+// Lines 565-589 in contract
+// Root user gets share automatically sent to wallet
+if (royaltyActive[defaultRefer][i]) {
+    rootShare = tierAmount / royaltyUsers[i];
+    // Transfer immediately - no claim needed!
+    payable(userInfo[defaultRefer].account).transfer(rootShare);
+}
+```
+
+### 2. **No ROI Cap** ✅
+**Normal users:** 150% ROI cap (configurable)  
+**Root user:** **UNLIMITED** royalty income!
+
+```solidity
+// Line 626 - Root user bypasses ROI cap
+if (userId == defaultRefer || userInfo[userId].royaltyIncome < roiCapLimit)
+```
+
+### 3. **Never Removed** ✅
+**Normal users:** Removed from pool when ROI cap reached  
+**Root user:** **Never removed** - stays active forever!
+
+```solidity
+// Lines 656-664 - Root user never removed
+if (userId != defaultRefer && ...) {  // NOT defaultRefer!
+    // Remove normal user
+}
+```
+
+### 4. **Perpetual Accumulation** ✅
+**NEW FEATURE:** If auto-transfer fails, funds accumulate forever!
+
+```solidity
+// Lines 584-587 - Accumulate on failure
+if (!success) {
+    rootUserPendingRoyalty[i] += rootShare; // NEVER expires!
+    royaltyDist[curDay][i] += rootShare;
+}
+```
+
+**Root user can claim accumulated funds anytime:**
+```javascript
+await matrix.claimRootRoyalty(0); // Claim tier 0
+const pending = await matrix.getRootPendingRoyalty(); // View all tiers
+```
+
+---    .call{value: rootShare}("");
         
     if (success) {
         userInfo[defaultRefer].royaltyIncome += rootShare;

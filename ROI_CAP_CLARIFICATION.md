@@ -54,17 +54,31 @@ userInfo[_recipient].levelIncome += incomeAmount;
 
 ## 🎯 Summary
 
+## 🎯 Summary
+
 | Income Type | ROI Cap? | Layer Limit? | Notes |
 |-------------|----------|--------------|-------|
 | **Royalty** | ✅ YES (150%) | ❌ None | Only income type with ROI cap |
-| **Level Income** | ❌ NO | ✅ YES (13 layers) | Configurable via `incomeLayers` (5-50) |
-| **Sponsor Commission** | ❌ NO | ❌ **UNLIMITED** | Pays at any depth, only requires sponsor Level 4+ |
-| **Referral** | ❌ NO | ❌ None | Direct sponsor payment on registration |
+| **Level Income** | ❌ NO | ✅ YES (13 layers) | Configurable via `setIncomeLayers` (5-50) |
+| **Sponsor Commission** | ❌ NO | ✅ **Configurable** (default 0 = unlimited) | `setSponsorCommissionLayers` (0-50) |
+| **Referral** | ❌ NO | ❌ None | Direct payment on registration |
 
 **Key Points:**
-- ✅ ROI cap (150%) = ONLY royalty income
-- ✅ Layer limit (13) = ONLY level income distribution
-- ✅ Sponsor commission = **UNLIMITED depth** (no layer limit)
+- ✅ ROI cap (150%) = ONLY royalty income  
+- ✅ Layer limit (13) = Level income distribution only
+- ✅ Sponsor commission = **Configurable** (0 = unlimited, >0 = limited)
 - ✅ Referral income = No limits at all (direct payment)
+
+**Sponsor Commission Layer Configuration:**
+```javascript
+// Default: Unlimited
+await matrix.sponsorCommissionLayers(); // Returns 0
+
+// Set to match income layers
+await matrix.setSponsorCommissionLayers(13);
+
+// Set to unlimited
+await matrix.setSponsorCommissionLayers(0);
+```
 
 **Current implementation is CORRECT** ✅
