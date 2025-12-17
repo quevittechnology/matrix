@@ -62,6 +62,7 @@ contract UniversalMatrix is
     
     // Sponsor commission settings
     uint256 public sponsorMinLevel; // Minimum level to receive commission
+    uint256 public sponsorCommissionLayers; // Layer limit for sponsor commission (0 = unlimited)
     
     // Registration royalty: Configurable % of registration fee goes to royalty pool
     uint256 public registrationRoyaltyPercent; // Configurable by admin (default 5%)
@@ -188,6 +189,7 @@ contract UniversalMatrix is
     // Admin setting change events
     event SponsorCommissionUpdated(uint256 newPercent);
     event SponsorMinLevelUpdated(uint256 newLevel);
+    event SponsorCommissionLayersUpdated(uint256 newLayers);
     event SponsorFallbackUpdated(SponsorFallback newFallback);
     event LevelPricesUpdated(uint256[13] newPrices);
     event FeeReceiverUpdated(address indexed oldReceiver, address indexed newReceiver);
@@ -268,6 +270,7 @@ contract UniversalMatrix is
         
         // Initialize sponsor commission settings
         sponsorMinLevel = 4; // Default Level 4
+        sponsorCommissionLayers = 0; // Default unlimited (0 = no layer limit)
         sponsorFallback = SponsorFallback.ROOT_USER; // Default fallback to root user
         
         // Initialize price cache settings
@@ -476,8 +479,10 @@ contract UniversalMatrix is
         dayIncome[_recipient][getUserCurDay(_recipient)] += incomeAmount;
         
         // Pay sponsor commission (upgradeSponsorPercent% of level income to direct sponsor)
-        // Only pay if within layer limit AND sponsor is Level 4+ (Root user always qualifies)
-        if (_layer <= incomeLayers && 
+        // Configurable layer limit: 0 = unlimited, >0 = limited to that many layers
+        bool withinLayerLimit = (sponsorCommissionLayers == 0) || (_layer <= sponsorCommissionLayers);
+        
+        if (withinLayerLimit && 
             userInfo[_recipient].referrer != 0 && 
             userInfo[_recipient].referrer != defaultRefer) {
             uint256 sponsor = userInfo[_recipient].referrer;
@@ -992,6 +997,13 @@ contract UniversalMatrix is
     function setSponsorCommission(uint256 _percent) external onlyOwner {
         require(_percent <= 100, "Invalid percentage");
         upgradeSponsorPercent = _percent;
+        emit SponsorCommissionUpdated(_percent);
+    }
+
+    function setSponsorCommissionLayers(uint256 _layers) external onlyOwner {
+        require(_layers <= 50, "Max 50 layers");
+        sponsorCommissionLayers = _layers;
+        emit SponsorCommissionLayersUpdated(_layers);
     }
 
     function setSponsorMinLevel(uint256 _level) external onlyOwner {
